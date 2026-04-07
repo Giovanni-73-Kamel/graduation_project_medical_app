@@ -1,15 +1,17 @@
 
 from fastapi import FastAPI 
-from database import engine
-import models
-from routers import post, user , auth ,contact, vote , reminder , chat
+from app.database import engine
+import app.models as models
+from routers import post, user , auth ,vote
 import bcrypt
 
+from routers.patient_mode import chat, contact, reminder
 
-models.Base.metadata.create_all(bind=engine) 
+
+# models.Base.metadata.create_all(bind=engine) 
 
 app = FastAPI()
-print(bcrypt.__version__)  # should print a version like 4.x
+# print(bcrypt.__version__)  # should print a version like 4.x
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -34,5 +36,5 @@ app.include_router(chat.router)
 
 @app.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"message": "Hello to Our Medical App !!"}
 

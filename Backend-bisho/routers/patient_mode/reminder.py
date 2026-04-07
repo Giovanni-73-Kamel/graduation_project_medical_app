@@ -1,6 +1,6 @@
 from fastapi import Depends, FastAPI , status , HTTPException , Response , APIRouter
 from routers import oauth2
-import schemas , database , models
+import app.schemas as schemas , app.database as database , app.models as models
 from sqlalchemy.orm import Session
 from typing import List
 
