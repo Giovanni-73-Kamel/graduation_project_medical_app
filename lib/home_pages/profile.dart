@@ -3,6 +3,9 @@ import 'package:gap/gap.dart';
 import 'package:medical/functions/app_colors.dart';
 import 'package:medical/functions/custom_text.dart';
 import 'package:medical/services/api_service.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io';
 
 /// The ProfileView screen displays user information including
 /// name, email, age, health score, and profile photo.
@@ -21,11 +24,42 @@ class _ProfileViewState extends State<ProfileView> {
   int userAge = 0;
   int healthScore = 75; 
   bool _isLoading = true;
+  File? _profileImage;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
     _fetchProfile();
+    _loadProfileImage();
+  }
+
+  Future<void> _loadProfileImage() async {
+    final prefs = await SharedPreferences.getInstance();
+    final imagePath = prefs.getString('profile_image_path');
+    if (imagePath != null && imagePath.isNotEmpty) {
+      final file = File(imagePath);
+      if (await file.exists()) {
+        setState(() {
+          _profileImage = file;
+        });
+      }
+    }
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile != null) {
+        setState(() {
+          _profileImage = File(pickedFile.path);
+        });
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('profile_image_path', pickedFile.path);
+      }
+    } catch (e) {
+      print('Failed to pick image: $e');
+    }
   }
 
   int _calculateAge(String dobString) {
@@ -84,21 +118,33 @@ class _ProfileViewState extends State<ProfileView> {
           child: Column(
             children: [
               const Gap(40),
-             // profile photo icon
-              Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: AppColors.primary,
-                    width: 4,
+              // profile photo icon
+              GestureDetector(
+                onTap: _pickImage,
+                child: Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: AppColors.primary,
+                      width: 4,
+                    ),
+                    image: _profileImage != null
+                        ? DecorationImage(
+                            image: FileImage(_profileImage!),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
                   ),
-                  image: DecorationImage(
-                    image: AssetImage('images/ana.png'), // elsora elle hat7otaha
-                    fit: BoxFit.cover,
-                  ),
+                  child: _profileImage == null
+                      ? Icon(
+                          Icons.camera_alt,
+                          size: 40,
+                          color: Colors.grey[600],
+                        )
+                      : null,
                 ),
               ),
 

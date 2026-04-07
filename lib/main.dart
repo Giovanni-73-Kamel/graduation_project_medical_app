@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:medical/home_pages/home.dart';
+import 'package:medical/home_pages/profile.dart';
 import 'package:medical/auth_pages/login.dart';
+import 'package:medical/screens/doctor/doctor_home_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Catch uncaught exceptions during build
-  FlutterError.onError = (FlutterErrorDetails details) {
-    debugPrint('Flutter Error: ${details.exception}');
-    debugPrintStack(stackTrace: details.stack);
-  };
-  
+
   runApp(const MyApp());
 }
 
@@ -21,9 +18,9 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: "Health Tracker",
-      // home: HomeView(),
-       home: LoginView(),
 
+      // home: DoctorHomeScreen(),
+      home: LoginView(),
     );
   }
 }

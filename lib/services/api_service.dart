@@ -30,22 +30,29 @@ class ApiService {
 
   /// Login with email + password. Saves the bearer token on success.
   static Future<Map<String, dynamic>> login(
-      String username, String password) async {
+    String username,
+    String password,
+  ) async {
     final response = await http.post(
-      Uri.parse('$baseUrl/login'),
-      body: {
-        'username': username,
-        'password': password,
-      },
+      Uri.parse('$baseUrl/login/'),
+      body: {'username': username, 'password': password},
     );
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
       await saveToken(data['access_token']);
       return data;
+    } else if (response.statusCode == 307 || response.statusCode == 308) {
+      final location = response.headers['location'] ?? 'unknown';
+      throw Exception('Login request redirected to $location (HTTP ${response.statusCode}). Check the API path.');
     } else {
-      throw Exception(
-          json.decode(response.body)['detail'] ?? 'Failed to login');
+      try {
+        throw Exception(
+          json.decode(response.body)['detail'] ?? 'Failed to login',
+        );
+      } catch (e) {
+        throw Exception('Failed to login: ${response.statusCode} - ${response.body.isEmpty ? 'Empty response' : response.body}');
+      }
     }
   }
 
@@ -83,9 +90,18 @@ class ApiService {
       }),
     );
 
+    if (response.statusCode == 307 || response.statusCode == 308) {
+      final location = response.headers['location'] ?? 'unknown';
+      throw Exception('Signup request redirected to $location (HTTP ${response.statusCode}). Check the API path and trailing slash.');
+    }
+
     if (response.statusCode != 201) {
-      throw Exception(
-          json.decode(response.body)['detail'] ?? 'Failed to sign up');
+      try {
+        final error = json.decode(response.body)['detail'] ?? 'Failed to sign up';
+        throw Exception(error);
+      } catch (e) {
+        throw Exception('Failed to sign up: ${response.statusCode} - ${response.body.isEmpty ? 'Empty response' : response.body}');
+      }
     }
   }
 
@@ -166,22 +182,24 @@ class ApiService {
 
   /// Update an existing reminder by [id].
   static Future<void> updateReminder(
-    int id, Map<String, dynamic> reminderData) async {
-  final token = await getToken();
-  final response = await http.put(
-    Uri.parse('$baseUrl/reminders/$id/'), // ✅ FIXED (added /)
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $token',
-    },
-    body: json.encode(reminderData),
-  );
-
-  if (response.statusCode != 200 && response.statusCode != 204) {
-    throw Exception(
-      json.decode(response.body)['detail'] ?? 'Failed to update reminder',
+    int id,
+    Map<String, dynamic> reminderData,
+  ) async {
+    final token = await getToken();
+    final response = await http.put(
+      Uri.parse('$baseUrl/reminders/$id/'), // ✅ FIXED (added /)
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode(reminderData),
     );
-  }
+
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception(
+        json.decode(response.body)['detail'] ?? 'Failed to update reminder',
+      );
+    }
   }
 
   /// Delete a reminder by [id].
@@ -215,22 +233,26 @@ class ApiService {
       throw Exception('Failed to load contacts');
     }
   }
-  /// update a certain contact
-  static Future<void> updateContact(int id, Map<String, dynamic> contactData) async {
-  final token = await getToken();
-  final response = await http.put(
-    Uri.parse('$baseUrl/contacts/$id'),
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $token',
-    },
-    body: json.encode(contactData),
-  );
 
-  if (response.statusCode != 200) {
-    throw Exception('Failed to update contact');
+  /// update a certain contact
+  static Future<void> updateContact(
+    int id,
+    Map<String, dynamic> contactData,
+  ) async {
+    final token = await getToken();
+    final response = await http.put(
+      Uri.parse('$baseUrl/contacts/$id'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode(contactData),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update contact');
+    }
   }
-}
 
   /// Create a new contact.
   static Future<void> createContact(Map<String, dynamic> contactData) async {
@@ -259,6 +281,439 @@ class ApiService {
 
     if (response.statusCode != 204) {
       throw Exception('Failed to delete contact');
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // Appointments API  →  /appointments/
+  // ─────────────────────────────────────────────
+
+  /// Get all appointments for the current user (doctor or patient).
+  static Future<List<dynamic>> getAppointments() async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/appointments/'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load appointments');
+    }
+  }
+
+  /// Create a new appointment.
+  static Future<Map<String, dynamic>> createAppointment(
+    Map<String, dynamic> appointmentData,
+  ) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/appointments/'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode(appointmentData),
+    );
+
+    if (response.statusCode == 201) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to create appointment');
+    }
+  }
+
+  /// Update an existing appointment by [id].
+  static Future<void> updateAppointment(
+    int id,
+    Map<String, dynamic> appointmentData,
+  ) async {
+    final token = await getToken();
+    final response = await http.put(
+      Uri.parse('$baseUrl/appointments/$id/'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode(appointmentData),
+    );
+
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception('Failed to update appointment');
+    }
+  }
+
+  /// Delete an appointment by [id].
+  static Future<void> deleteAppointment(int id) async {
+    final token = await getToken();
+    final response = await http.delete(
+      Uri.parse('$baseUrl/appointments/$id'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode != 204) {
+      throw Exception('Failed to delete appointment');
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // Patients API  →  /patients/
+  // ─────────────────────────────────────────────
+
+  /// Get all patients for the current doctor.
+  static Future<List<dynamic>> getPatients() async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/patients/'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load patients');
+    }
+  }
+
+  /// Get patient details by [id].
+  static Future<Map<String, dynamic>> getPatientById(int id) async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/patients/$id'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load patient details');
+    }
+  }
+
+  /// Create a new patient profile.
+  static Future<Map<String, dynamic>> createPatient(
+    Map<String, dynamic> patientData,
+  ) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/patients/'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode(patientData),
+    );
+
+    if (response.statusCode == 201) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to create patient');
+    }
+  }
+
+  /// Update patient information by [id].
+  static Future<void> updatePatient(
+    int id,
+    Map<String, dynamic> patientData,
+  ) async {
+    final token = await getToken();
+    final response = await http.put(
+      Uri.parse('$baseUrl/patients/$id'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode(patientData),
+    );
+
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception('Failed to update patient');
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // Medical Records API  →  /medical-records/
+  // ─────────────────────────────────────────────
+
+  /// Get medical records for a patient by [patientId].
+  static Future<List<dynamic>> getMedicalRecords(int patientId) async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/medical-records/patient/$patientId'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load medical records');
+    }
+  }
+
+  /// Create or update medical records for a patient.
+  static Future<Map<String, dynamic>> createMedicalRecord(
+    Map<String, dynamic> recordData,
+  ) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/medical-records/'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode(recordData),
+    );
+
+    if (response.statusCode == 201) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to create medical record');
+    }
+  }
+
+  /// Update medical record by [id].
+  static Future<void> updateMedicalRecord(
+    int id,
+    Map<String, dynamic> recordData,
+  ) async {
+    final token = await getToken();
+    final response = await http.put(
+      Uri.parse('$baseUrl/medical-records/$id'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode(recordData),
+    );
+
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception('Failed to update medical record');
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // Prescriptions API  →  /prescriptions/
+  // ─────────────────────────────────────────────
+
+  /// Get prescriptions for an appointment by [appointmentId].
+  static Future<List<dynamic>> getPrescriptionsByAppointment(
+    int appointmentId,
+  ) async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/prescriptions/appointment/$appointmentId'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load prescriptions');
+    }
+  }
+
+  /// Create a new prescription.
+  static Future<Map<String, dynamic>> createPrescription(
+    Map<String, dynamic> prescriptionData,
+  ) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/prescriptions/'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode(prescriptionData),
+    );
+
+    if (response.statusCode == 201) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to create prescription');
+    }
+  }
+
+  /// Update prescription by [id].
+  static Future<void> updatePrescription(
+    int id,
+    Map<String, dynamic> prescriptionData,
+  ) async {
+    final token = await getToken();
+    final response = await http.put(
+      Uri.parse('$baseUrl/prescriptions/$id'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode(prescriptionData),
+    );
+
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception('Failed to update prescription');
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // Lab Results API  →  /lab-results/
+  // ─────────────────────────────────────────────
+
+  /// Get lab results for an appointment by [appointmentId].
+  static Future<List<dynamic>> getLabResultsByAppointment(
+    int appointmentId,
+  ) async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/lab-results/appointment/$appointmentId'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load lab results');
+    }
+  }
+
+  /// Create a new lab result.
+  static Future<Map<String, dynamic>> createLabResult(
+    Map<String, dynamic> labResultData,
+  ) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/lab-results/'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode(labResultData),
+    );
+
+    if (response.statusCode == 201) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to create lab result');
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // Doctors API  →  /doctors/
+  // ─────────────────────────────────────────────
+
+  /// Get all doctors (for patient selection).
+  static Future<List<dynamic>> getDoctors() async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/doctors/'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load doctors');
+    }
+  }
+
+  /// Get doctor details by [id].
+  static Future<Map<String, dynamic>> getDoctorById(int id) async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/doctors/$id'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load doctor details');
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // Clinics API  →  /clinics/
+  // ─────────────────────────────────────────────
+
+  /// Get all clinics.
+  static Future<List<dynamic>> getClinics() async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/clinics/'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load clinics');
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // Medications API  →  /medications/
+  // ─────────────────────────────────────────────
+
+  /// Get all medications.
+  static Future<List<dynamic>> getMedications() async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/medications/'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load medications');
+    }
+  }
+
+  /// Search medications by [query].
+  static Future<List<dynamic>> searchMedications(String query) async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/medications/search?q=$query'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to search medications');
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // Admin API  →  /admin/
+  // ─────────────────────────────────────────────
+
+  /// Get admin dashboard statistics.
+  static Future<Map<String, dynamic>> getDashboardStats() async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/admin/dashboard'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load dashboard stats');
+    }
+  }
+
+  /// Get all users (admin only).
+  static Future<List<dynamic>> getAllUsers() async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/admin/users'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load users');
     }
   }
 }

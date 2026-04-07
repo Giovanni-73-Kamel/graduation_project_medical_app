@@ -2,7 +2,7 @@
 from fastapi import FastAPI 
 from database import engine
 import models
-from routers import post, user , auth ,contact, vote , reminder
+from routers import post, user , auth ,contact, vote , reminder , chat
 import bcrypt
 
 
@@ -27,7 +27,7 @@ app.include_router(auth.router)
 app.include_router(vote.router)
 app.include_router(reminder.router)
 app.include_router(contact.router)
-
+app.include_router(chat.router)
 
 
 

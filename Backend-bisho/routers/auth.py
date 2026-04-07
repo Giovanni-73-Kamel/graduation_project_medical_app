@@ -10,7 +10,7 @@ from jose import JWTError , jwt
 router = APIRouter(tags=['Authentication'])
 
 
-@router.post("/login", response_model=schemas.Token)
+@router.post("/login/", response_model=schemas.Token)
 def login(login_credintials:OAuth2PasswordRequestForm = Depends(),db:Session= Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == login_credintials.username).first()
     if not user : 

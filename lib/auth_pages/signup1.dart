@@ -4,6 +4,8 @@ import 'package:medical/functions/app_colors.dart';
 import 'package:medical/functions/button.dart';
 import 'package:medical/functions/custom_text.dart';
 import 'package:medical/functions/txtField.dart';
+import 'package:medical/services/api_service.dart';
+import 'package:medical/screens/doctor/doctor_home_screen.dart';
 import 'signup2.dart';
 
 /// SignUpView - Step 1: Basic account information
@@ -58,7 +60,7 @@ class _SignUpViewState extends State<SignUpView> {
     }
   }
 
-  void _goToStep2() {
+  Future<void> _goToStep2() async {
     // Validate all basic form fields first
     if (!formKey.currentState!.validate()) return;
 
@@ -84,23 +86,66 @@ class _SignUpViewState extends State<SignUpView> {
       return;
     }
 
-    // All valid — navigate to step 2 passing collected data
+    // All valid — check role and navigate accordingly
     final dob =
         "${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}";
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => SignUp2View(
+    if (isDoctor) {
+      // Doctor: Skip step 2, create account directly and go to doctor home
+      try {
+        await ApiService.signUp(
           username: nameController.text.trim(),
           email: emailController.text.trim(),
           password: passController.text,
           phoneNumber: phoneController.text.trim(),
-          role: isDoctor ? 'doctor' : 'patient',
+          role: 'doctor',
           dateOfBirth: dob,
+          // Provide empty strings for doctor/emergency info since skipping step 2
+          doctorName: '',
+          doctorEmail: '',
+          doctorPhone: '',
+          emergencyName: '',
+          emergencyEmail: '',
+          emergencyPhone: '',
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Doctor account created successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          // Navigate directly to doctor home screen
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const DoctorHomeScreen()),
+            (route) => false,
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+          );
+        }
+      }
+    } else {
+      // Patient: Go to step 2 for additional info
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => SignUp2View(
+            username: nameController.text.trim(),
+            email: emailController.text.trim(),
+            password: passController.text,
+            phoneNumber: phoneController.text.trim(),
+            role: 'patient',
+            dateOfBirth: dob,
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
 
   @override
@@ -177,8 +222,7 @@ class _SignUpViewState extends State<SignUpView> {
                           child: GestureDetector(
                             onTap: () => setState(() => isDoctor = false),
                             child: Container(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 12),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
                               decoration: BoxDecoration(
                                 color: !isDoctor
                                     ? AppColors.primary
@@ -215,8 +259,7 @@ class _SignUpViewState extends State<SignUpView> {
                           child: GestureDetector(
                             onTap: () => setState(() => isDoctor = true),
                             child: Container(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 12),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
                               decoration: BoxDecoration(
                                 color: isDoctor
                                     ? AppColors.primary
@@ -295,18 +338,19 @@ class _SignUpViewState extends State<SignUpView> {
                     onTap: () => _selectDate(context),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 15),
+                        horizontal: 16,
+                        vertical: 15,
+                      ),
                       decoration: BoxDecoration(
-                        border: Border.all(
-                          color: AppColors.primary,
-                          width: 2,
-                        ),
+                        border: Border.all(color: AppColors.primary, width: 2),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.calendar_month_outlined,
-                              color: AppColors.primary),
+                          Icon(
+                            Icons.calendar_month_outlined,
+                            color: AppColors.primary,
+                          ),
                           const Gap(12),
                           CustomText(
                             text: _selectedDate == null
@@ -352,10 +396,7 @@ class _SignUpViewState extends State<SignUpView> {
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     child: Container(
                       decoration: BoxDecoration(
-                        border: Border.all(
-                          color: AppColors.primary,
-                          width: 2,
-                        ),
+                        border: Border.all(color: AppColors.primary, width: 2),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: CustomAuthBtn(
@@ -371,8 +412,11 @@ class _SignUpViewState extends State<SignUpView> {
                   Row(
                     children: [
                       Expanded(
-                          child: Divider(
-                              color: Colors.grey.shade300, thickness: 1)),
+                        child: Divider(
+                          color: Colors.grey.shade300,
+                          thickness: 1,
+                        ),
+                      ),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: CustomText(
@@ -383,8 +427,11 @@ class _SignUpViewState extends State<SignUpView> {
                         ),
                       ),
                       Expanded(
-                          child: Divider(
-                              color: Colors.grey.shade300, thickness: 1)),
+                        child: Divider(
+                          color: Colors.grey.shade300,
+                          thickness: 1,
+                        ),
+                      ),
                     ],
                   ),
 

@@ -23,12 +23,12 @@ class UserCreate(BaseModel):
     role : str
     phone_number : str
     date_of_birth : str
-    doctor_name: str
-    doctor_email: str
-    doctor_phone: str
-    emergency_name: str
-    emergency_email:str
-    emergency_phone: str
+    doctor_name: str = "None"
+    doctor_email: str = "None"
+    doctor_phone: str = "None"
+    emergency_name: str = "None"
+    emergency_email:str = "None"
+    emergency_phone: str = "None"
     
 
 

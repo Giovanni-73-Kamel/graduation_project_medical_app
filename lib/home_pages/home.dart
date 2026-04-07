@@ -341,7 +341,7 @@ class _BloodPressureWidgetState extends State<BloodPressureWidget>
               // Gauge
               Center(
                 child: CustomPaint(
-                  size: const Size(double.infinity, 110),
+                  size: const Size(double.infinity, 140),
                   painter: _BPGaugePainter(_needleAnim.value),
                 ),
               ),
@@ -404,8 +404,9 @@ class _BPGaugePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final cx = size.width / 2;
-    final cy = size.height - 12;
-    final radius = size.width * 0.42;
+    final cy = size.height - 20;
+    // ensure radius fits inside both width and the available vertical space
+    final radius = min(size.width * 0.42, cy - 14);
 
     const startAngle = pi; // 180°
     const sweepAngle = pi; // 180° arc
@@ -679,7 +680,7 @@ class _EcgPainter extends CustomPainter {
 
     // One full ECG cycle normalised to width 1.0
     // Points: (x, y) fractions of size
-    List<Offset> ecgPattern(double offsetX) {
+    List<Offset> _ecgPattern(double offsetX) {
       return [
         Offset(offsetX + 0.00 * w, mid),
         Offset(offsetX + 0.08 * w, mid),
@@ -699,7 +700,7 @@ class _EcgPainter extends CustomPainter {
     // Two cycles offset by progress for seamless scrolling
     for (int cycle = -1; cycle <= 1; cycle++) {
       final ox = (-progress + cycle) * w;
-      final pts = ecgPattern(ox);
+      final pts = _ecgPattern(ox);
       for (int i = 0; i < pts.length - 1; i++) {
         canvas.drawLine(pts[i], pts[i + 1], glowPaint);
         canvas.drawLine(pts[i], pts[i + 1], paint);
@@ -908,7 +909,7 @@ class _CircleArcPainter extends CustomPainter {
 //  Unused legacy pages kept to avoid tree-shake warnings
 // ─────────────────────────────────────────────────────────────────────────────
 class _UnusedHelpPage extends StatelessWidget {
-  const _UnusedHelpPage();
+  const _UnusedHelpPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -936,7 +937,7 @@ class _UnusedHelpPage extends StatelessWidget {
 }
 
 class _UnusedProfilePage extends StatelessWidget {
-  const _UnusedProfilePage();
+  const _UnusedProfilePage({super.key});
 
   @override
   Widget build(BuildContext context) {

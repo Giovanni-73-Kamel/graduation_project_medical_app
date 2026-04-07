@@ -6,9 +6,10 @@ import 'package:medical/functions/custom_text.dart';
 import 'package:medical/functions/txtField.dart';
 import 'package:medical/services/api_service.dart';
 import 'package:medical/home_pages/home.dart';
+import 'package:medical/screens/doctor/doctor_home_screen.dart';
 import 'signup1.dart';
 
-/// LoginView 
+/// LoginView
 class LoginView extends StatefulWidget {
   const LoginView({super.key});
 
@@ -17,7 +18,8 @@ class LoginView extends StatefulWidget {
 }
 
 class _LoginViewState extends State<LoginView> {
-  final emailController = TextEditingController(); // Using email as username for this example
+  final emailController =
+      TextEditingController(); // Using email as username for this example
   final passController = TextEditingController();
   final formKey = GlobalKey<FormState>();
   bool isDoctor = false;
@@ -34,12 +36,28 @@ class _LoginViewState extends State<LoginView> {
     if (formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
       try {
-        await ApiService.login(emailController.text, passController.text);
+        final userData = await ApiService.login(
+          emailController.text,
+          passController.text,
+        );
         if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const HomeView()),
-          );
+          // Check user role and navigate accordingly
+          final userRole =
+              userData['user']?['role'] ?? userData['role'] ?? 'patient';
+
+          if (userRole == 'doctor') {
+            // Doctor: Navigate to DoctorHomeScreen
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const DoctorHomeScreen()),
+            );
+          } else {
+            // Patient/User: Navigate to HomeView
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const HomeView()),
+            );
+          }
         }
       } catch (e) {
         if (mounted) {
@@ -55,7 +73,6 @@ class _LoginViewState extends State<LoginView> {
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       backgroundColor: Colors.white,
       resizeToAvoidBottomInset: true,
@@ -95,7 +112,7 @@ class _LoginViewState extends State<LoginView> {
                   ),
 
                   const Gap(40),
-                  
+
                   CustomText(
                     text: 'Welcome Back',
                     color: AppColors.primary,
@@ -130,7 +147,9 @@ class _LoginViewState extends State<LoginView> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               decoration: BoxDecoration(
-                                color: !isDoctor ? AppColors.primary : Colors.transparent,
+                                color: !isDoctor
+                                    ? AppColors.primary
+                                    : Colors.transparent,
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
@@ -138,14 +157,18 @@ class _LoginViewState extends State<LoginView> {
                                 children: [
                                   Icon(
                                     Icons.person_outline,
-                                    color: !isDoctor ? Colors.white : Colors.grey.shade600,
+                                    color: !isDoctor
+                                        ? Colors.white
+                                        : Colors.grey.shade600,
                                     size: 20,
                                   ),
                                   const Gap(8),
                                   Text(
                                     'User',
                                     style: TextStyle(
-                                      color: !isDoctor ? Colors.white : Colors.grey.shade600,
+                                      color: !isDoctor
+                                          ? Colors.white
+                                          : Colors.grey.shade600,
                                       fontWeight: FontWeight.w600,
                                       fontSize: 16,
                                     ),
@@ -161,7 +184,9 @@ class _LoginViewState extends State<LoginView> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               decoration: BoxDecoration(
-                                color: isDoctor ? AppColors.primary : Colors.transparent,
+                                color: isDoctor
+                                    ? AppColors.primary
+                                    : Colors.transparent,
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
@@ -169,14 +194,18 @@ class _LoginViewState extends State<LoginView> {
                                 children: [
                                   Icon(
                                     Icons.medical_services_outlined,
-                                    color: isDoctor ? Colors.white : Colors.grey.shade600,
+                                    color: isDoctor
+                                        ? Colors.white
+                                        : Colors.grey.shade600,
                                     size: 20,
                                   ),
                                   const Gap(8),
                                   Text(
                                     'Doctor',
                                     style: TextStyle(
-                                      color: isDoctor ? Colors.white : Colors.grey.shade600,
+                                      color: isDoctor
+                                          ? Colors.white
+                                          : Colors.grey.shade600,
                                       fontWeight: FontWeight.w600,
                                       fontSize: 16,
                                     ),
@@ -195,10 +224,7 @@ class _LoginViewState extends State<LoginView> {
                   // Email field with border styling
                   Container(
                     decoration: BoxDecoration(
-                      border: Border.all(
-                        color: AppColors.primary,
-                        width: 2,
-                      ),
+                      border: Border.all(color: AppColors.primary, width: 2),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: CustomTxtfield(
@@ -214,10 +240,7 @@ class _LoginViewState extends State<LoginView> {
                   // Password field with border styling
                   Container(
                     decoration: BoxDecoration(
-                      border: Border.all(
-                        color: AppColors.primary,
-                        width: 2,
-                      ),
+                      border: Border.all(color: AppColors.primary, width: 2),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: CustomTxtfield(
@@ -253,26 +276,22 @@ class _LoginViewState extends State<LoginView> {
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     child: Container(
                       decoration: BoxDecoration(
-                        border: Border.all(
-                          color: AppColors.primary,
-                          width: 2,
-                        ),
+                        border: Border.all(color: AppColors.primary, width: 2),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: _isLoading
-                          ? const Center(child: Padding(
-                              padding: EdgeInsets.all(8.0),
-                              child: CircularProgressIndicator(),
-                            ))
-                          : CustomAuthBtn(
-                              text: 'Login',
-                              onTap: _attemptLogin,
-                            ),
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(8.0),
+                                child: CircularProgressIndicator(),
+                              ),
+                            )
+                          : CustomAuthBtn(text: 'Login', onTap: _attemptLogin),
                     ),
                   ),
-                  
+
                   const Gap(30),
-                  
+
                   // Divider with "OR" text
                   Row(
                     children: [
@@ -299,9 +318,9 @@ class _LoginViewState extends State<LoginView> {
                       ),
                     ],
                   ),
-                  
+
                   const Gap(30),
-                  
+
                   // Sign up section with better visual hierarchy
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -330,7 +349,7 @@ class _LoginViewState extends State<LoginView> {
                       ),
                     ],
                   ),
-                  
+
                   const Gap(40),
                 ],
               ),

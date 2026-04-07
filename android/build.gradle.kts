@@ -4,7 +4,7 @@
             mavenCentral()
         }
         dependencies {
-            classpath("com.android.tools.build:gradle:8.5.0") // match your AGP
+            classpath("com.android.tools.build:gradle:8.9.1") // match your AGP
         }
     }
 

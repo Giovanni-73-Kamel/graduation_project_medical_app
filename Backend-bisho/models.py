@@ -25,12 +25,12 @@ class User(Base):
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
     phone_number=Column(String, nullable=False)
     date_of_birth=Column(String, nullable=False)
-    doctor_name=Column(String,nullable=False)
-    doctor_email=Column(String, nullable=False)
-    doctor_phone=Column(String, nullable=False)
-    emergency_name=Column(String,nullable=False)
-    emergency_email=Column(String, nullable=False)
-    emergency_phone=Column(String, nullable=False)
+    doctor_name=Column(String, server_default= 'None') 
+    doctor_email=Column(String, server_default= 'None')
+    doctor_phone=Column(String, server_default= 'None')
+    emergency_name=Column(String, server_default= 'None')
+    emergency_email=Column(String, server_default= 'None')
+    emergency_phone=Column(String, server_default= 'None')
 
 
 
