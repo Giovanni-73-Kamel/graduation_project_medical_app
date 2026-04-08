@@ -20,6 +20,48 @@ class PatientModel {
     required this.bloodPressure,
     required this.temperature,
   });
+
+  // Add fromJson factory for API integration
+  factory PatientModel.fromJson(Map<String, dynamic> json) {
+    return PatientModel(
+      id: json['id'] ?? 0,
+      name: json['full_name'] ?? json['name'] ?? 'Unknown Patient',
+      age: json['age'] ?? 0,
+      email: json['email'] ?? '',
+      phone: json['phone'] ?? '',
+      avatarInitials: _getInitials(
+        json['full_name'] ?? json['name'] ?? 'Unknown',
+      ),
+      heartRate: json['heart_rate'] ?? 72,
+      bloodPressure: json['blood_pressure'] ?? '120/80',
+      temperature: (json['temperature'] ?? 36.6).toDouble(),
+    );
+  }
+
+  // Add toJson method for API integration
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'full_name': name,
+      'age': age,
+      'email': email,
+      'phone': phone,
+      'heart_rate': heartRate,
+      'blood_pressure': bloodPressure,
+      'temperature': temperature,
+    };
+  }
+
+  // Helper method to get initials
+  static String _getInitials(String name) {
+    final parts = name.split(' ');
+    if (parts.length >= 2) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    } else if (parts.isNotEmpty) {
+      return parts[0][0].toUpperCase();
+    }
+    return 'U';
+  }
 }
 
 // ── Dummy patients ──────────────────────────────────────────────────────────

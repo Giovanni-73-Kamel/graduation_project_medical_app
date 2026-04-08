@@ -3,6 +3,9 @@ import 'package:gap/gap.dart';
 import 'package:medical/functions/app_colors.dart';
 import 'package:medical/functions/custom_text.dart';
 import 'package:medical/services/api_service.dart';
+import 'package:medical/models/doctor_model.dart';
+import 'package:medical/widgets/doctor_card.dart';
+import 'package:medical/screens/patient/doctor_selection_screen.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
@@ -22,16 +25,21 @@ class _ProfileViewState extends State<ProfileView> {
   String userEmail = "...";
   String userPhone = "...";
   int userAge = 0;
-  int healthScore = 75; 
+  int healthScore = 75;
   bool _isLoading = true;
   File? _profileImage;
   final ImagePicker _picker = ImagePicker();
+
+  // Doctor related state
+  DoctorModel? _assignedDoctor;
+  bool _isLoadingDoctor = true;
 
   @override
   void initState() {
     super.initState();
     _fetchProfile();
     _loadProfileImage();
+    _fetchAssignedDoctor();
   }
 
   Future<void> _loadProfileImage() async {
@@ -49,7 +57,9 @@ class _ProfileViewState extends State<ProfileView> {
 
   Future<void> _pickImage() async {
     try {
-      final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+      );
       if (pickedFile != null) {
         setState(() {
           _profileImage = File(pickedFile.path);
@@ -67,7 +77,8 @@ class _ProfileViewState extends State<ProfileView> {
       DateTime dob = DateTime.parse(dobString);
       DateTime today = DateTime.now();
       int age = today.year - dob.year;
-      if (today.month < dob.month || (today.month == dob.month && today.day < dob.day)) {
+      if (today.month < dob.month ||
+          (today.month == dob.month && today.day < dob.day)) {
         age--;
       }
       return age;
@@ -83,7 +94,7 @@ class _ProfileViewState extends State<ProfileView> {
         userEmail = profile['email'] ?? 'No email';
         userName = profile['username'] ?? userEmail.split('@')[0].toUpperCase();
         userPhone = profile['phone_number'] ?? 'Not set';
-        
+
         if (profile['date_of_birth'] != null) {
           userAge = _calculateAge(profile['date_of_birth']);
         } else {
@@ -104,108 +115,167 @@ class _ProfileViewState extends State<ProfileView> {
     }
   }
 
+  Future<void> _fetchAssignedDoctor() async {
+    try {
+      final profile = await ApiService.getUserProfile();
+      final doctorId = profile['doctor_id'];
+
+      if (doctorId != null) {
+        final doctorData = await ApiService.getDoctorById(doctorId);
+        final doctor = DoctorModel.fromJson(doctorData);
+
+        if (mounted) {
+          setState(() {
+            _assignedDoctor = doctor;
+            _isLoadingDoctor = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isLoadingDoctor = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingDoctor = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _navigateToDoctorSelection() async {
+    final selectedDoctor = await Navigator.push<DoctorModel>(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            DoctorSelectionScreen(currentDoctorId: _assignedDoctor?.id),
+      ),
+    );
+
+    if (selectedDoctor != null && mounted) {
+      setState(() {
+        _assignedDoctor = selectedDoctor;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Doctor assigned successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       // Set the background color for the whole screen
       backgroundColor: Colors.white,
 
-      body: _isLoading 
-        ? const Center(child: CircularProgressIndicator())
-        : SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Column(
-            children: [
-              const Gap(40),
-              // profile photo icon
-              GestureDetector(
-                onTap: _pickImage,
-                child: Container(
-                  width: 120,
-                  height: 120,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: AppColors.primary,
-                      width: 4,
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  children: [
+                    const Gap(40),
+                    // profile photo icon
+                    GestureDetector(
+                      onTap: _pickImage,
+                      child: Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[200],
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppColors.primary,
+                            width: 4,
+                          ),
+                          image: _profileImage != null
+                              ? DecorationImage(
+                                  image: FileImage(_profileImage!),
+                                  fit: BoxFit.cover,
+                                )
+                              : null,
+                        ),
+                        child: _profileImage == null
+                            ? Icon(
+                                Icons.camera_alt,
+                                size: 40,
+                                color: Colors.grey[600],
+                              )
+                            : null,
+                      ),
                     ),
-                    image: _profileImage != null
-                        ? DecorationImage(
-                            image: FileImage(_profileImage!),
-                            fit: BoxFit.cover,
-                          )
-                        : null,
-                  ),
-                  child: _profileImage == null
-                      ? Icon(
-                          Icons.camera_alt,
-                          size: 40,
-                          color: Colors.grey[600],
-                        )
-                      : null,
+
+                    const Gap(30),
+
+                    // Page Title
+                    CustomText(
+                      text: 'My Profile',
+                      color: AppColors.primary,
+                      size: 35,
+                      weight: FontWeight.bold,
+                    ),
+
+                    const Gap(40),
+
+                    // Profile Information Cards
+
+                    // Name Card
+                    _buildInfoCard(
+                      icon: Icons.person_outline,
+                      label: 'Name',
+                      value: userName,
+                    ),
+
+                    const Gap(20),
+
+                    // Email Card
+                    _buildInfoCard(
+                      icon: Icons.email_outlined,
+                      label: 'Email',
+                      value: userEmail,
+                    ),
+
+                    const Gap(20),
+
+                    // Age Card
+                    _buildInfoCard(
+                      icon: Icons.cake_outlined,
+                      label: 'Age',
+                      value: userAge > 0 ? '$userAge years' : 'Not set',
+                    ),
+
+                    const Gap(20),
+
+                    // Phone Card
+                    _buildInfoCard(
+                      icon: Icons.phone_android_outlined,
+                      label: 'Phone',
+                      value: userPhone,
+                    ),
+
+                    const Gap(40),
+
+                    // Health Score Card
+                    _buildHealthScoreCard(),
+
+                    const Gap(40),
+
+                    // Doctor Section
+                    _buildDoctorSection(),
+
+                    const Gap(40),
+                  ],
                 ),
               ),
-
-              const Gap(30),
-
-              // Page Title
-              CustomText(
-                text: 'My Profile',
-                color: AppColors.primary,
-                size: 35,
-                weight: FontWeight.bold,
-              ),
-
-              const Gap(40),
-
-              // Profile Information Cards
-              
-              // Name Card
-              _buildInfoCard(
-                icon: Icons.person_outline,
-                label: 'Name',
-                value: userName,
-              ),
-
-              const Gap(20),
-
-              // Email Card
-              _buildInfoCard(
-                icon: Icons.email_outlined,
-                label: 'Email',
-                value: userEmail,
-              ),
-
-              const Gap(20),
-
-              // Age Card
-              _buildInfoCard(
-                icon: Icons.cake_outlined,
-                label: 'Age',
-                value: userAge > 0 ? '$userAge years' : 'Not set',
-              ),
-
-              const Gap(20),
-
-              // Phone Card
-              _buildInfoCard(
-                icon: Icons.phone_android_outlined,
-                label: 'Phone',
-                value: userPhone,
-              ),
-
-              const Gap(20),
-
-              // Health Score Card
-              _buildHealthScoreCard(),
-
-              const Gap(40),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
 
@@ -231,11 +301,7 @@ class _ProfileViewState extends State<ProfileView> {
               color: Colors.white.withOpacity(0.2),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(
-              icon,
-              color: Colors.white,
-              size: 30,
-            ),
+            child: Icon(icon, color: Colors.white, size: 30),
           ),
 
           const Gap(15),
@@ -347,5 +413,82 @@ class _ProfileViewState extends State<ProfileView> {
     } else {
       return Colors.red;
     }
+  }
+
+  /// Builds the doctor section widget
+  Widget _buildDoctorSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Section header
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            CustomText(
+              text: 'My Doctor',
+              color: AppColors.primary,
+              size: 20,
+              weight: FontWeight.bold,
+            ),
+            TextButton.icon(
+              onPressed: _navigateToDoctorSelection,
+              icon: const Icon(Icons.edit, size: 16),
+              label: const Text('Change', style: TextStyle(fontSize: 12)),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Doctor card or empty state
+        _isLoadingDoctor
+            ? const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(20),
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            : _assignedDoctor != null
+            ? DoctorCard(
+                doctor: _assignedDoctor!,
+                onTap: _navigateToDoctorSelection,
+              )
+            : Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey[300]!),
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.person_add_outlined,
+                      size: 48,
+                      color: Colors.grey[400],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No doctor assigned',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Tap to select your doctor',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+      ],
+    );
   }
 }

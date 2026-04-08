@@ -14,6 +14,31 @@ class AppointmentModel {
     required this.note,
     required this.type,
   });
+
+  // Add fromJson factory for API integration
+  factory AppointmentModel.fromJson(Map<String, dynamic> json) {
+    return AppointmentModel(
+      id: json['id'] ?? 0,
+      patientName:
+          json['patient_name'] ?? json['patientName'] ?? 'Unknown Patient',
+      date: json['date'] ?? '',
+      time: json['time'] ?? '',
+      note: json['note'] ?? '',
+      type: json['type'] ?? 'checkup',
+    );
+  }
+
+  // Add toJson method for API integration
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'patient_name': patientName,
+      'date': date,
+      'time': time,
+      'note': note,
+      'type': type,
+    };
+  }
 }
 
 // ── Dummy appointments ──────────────────────────────────────────────────────

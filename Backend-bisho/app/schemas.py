@@ -76,6 +76,23 @@ class ContactOut(BaseModel):
     class Config:
         from_attributes = True
 
+class Patient(BaseModel):
+    name: str
+    type: str
+    phone: str
+    email: str
+
+class PatientOut(BaseModel):
+    name: str
+    id : int
+    type: str
+    phone: str
+    email: str
+
+    class Config:
+        from_attributes = True
+
+
 class Reminder(BaseModel):
     title : str
     type: str

@@ -36,23 +36,37 @@ class _LoginViewState extends State<LoginView> {
     if (formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
       try {
-        final userData = await ApiService.login(
-          emailController.text,
-          passController.text,
-        );
-        if (mounted) {
-          // Check user role and navigate accordingly
-          final userRole =
-              userData['user']?['role'] ?? userData['role'] ?? 'patient';
+        // First login to get token
+        await ApiService.login(emailController.text, passController.text);
 
-          if (userRole == 'doctor') {
-            // Doctor: Navigate to DoctorHomeScreen
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const DoctorHomeScreen()),
-            );
-          } else {
-            // Patient/User: Navigate to HomeView
+        if (mounted) {
+          // Then get user profile to determine role
+          try {
+            final userProfile = await ApiService.getUserProfile();
+            print('User Profile: $userProfile'); // Debug
+
+            final userRole =
+                userProfile['role']?.toString().toLowerCase() ?? 'patient';
+            print('Final detected role: $userRole'); // Debug
+
+            if (userRole == 'doctor') {
+              print('Navigating to DoctorHomeScreen');
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const DoctorHomeScreen(),
+                ),
+              );
+            } else {
+              print('Navigating to HomeView');
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const HomeView()),
+              );
+            }
+          } catch (profileError) {
+            print('Error getting profile: $profileError');
+            // Fallback to HomeView if profile fetch fails
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (context) => const HomeView()),

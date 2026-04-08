@@ -13,39 +13,6 @@ class Post(Base):
     owner_id = Column(Integer, ForeignKey("users.id",ondelete="CASCADE"),nullable=False)
     owner = relationship("User")
 
-
-class User(Base):
-    __tablename__ = "users"
-
-    id = Column(Integer, nullable=False,primary_key=True )
-    username=Column(String, nullable=False, unique=True)
-    email=Column(String, nullable=False, unique=True)
-    password = Column(String, nullable=False)
-    role=Column(String, nullable=False)
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
-    phone_number=Column(String, nullable=False)
-    date_of_birth=Column(String, nullable=False)
-    doctor_name=Column(String, server_default= 'None') 
-    doctor_email=Column(String, server_default= 'None')
-    doctor_phone=Column(String, server_default= 'None')
-    emergency_name=Column(String, server_default= 'None')
-    emergency_email=Column(String, server_default= 'None')
-    emergency_phone=Column(String, server_default= 'None')
-
-
-
-
-
-    # doctor_id = Column(Integer,ForeignKey("doctors.id", ondelete="SET NULL"))
-    # doctor = relationship("Doctor")
-    # emergency_id = Column(Integer,ForeignKey("emergencys.id",ondelete="CASCADE"),nullable=False)
-    # emergency = relationship("Emergency")
-
-class Vote(Base):
-    __tablename__ = "votes"
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True) 
-    post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True) 
-
 class Doctor(Base):
     __tablename__ = "doctors"
 
@@ -62,6 +29,30 @@ class Emergency(Base):
     name=Column(String, nullable=False, unique=True)
     email=Column(String, nullable=False, unique=True)
     phone_number=Column(String, nullable=False, unique=False)
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, nullable=False,primary_key=True )
+    username=Column(String, nullable=False, unique=True)
+    email=Column(String, nullable=False, unique=True)
+    password = Column(String, nullable=False)
+    role=Column(String, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
+    phone_number=Column(String, nullable=False)
+    date_of_birth=Column(String, nullable=False)
+    
+    doctor_id = Column(Integer,ForeignKey("doctors.id", ondelete="SET NULL"), nullable= True)
+    doctor = relationship("Doctor")
+    emergency_id = Column(Integer,ForeignKey("emergencys.id",ondelete="CASCADE"), nullable= True)
+    emergency = relationship("Emergency")
+
+# class Vote(Base):
+#     __tablename__ = "votes"
+#     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True) 
+#     post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True) 
+
 
 class Contact(Base) :
     __tablename__ = "contacts"

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:medical/functions/app_colors.dart';
 import 'package:medical/functions/custom_text.dart';
+import 'package:medical/services/api_service.dart';
 
 class DoctorProfileScreen extends StatefulWidget {
   const DoctorProfileScreen({super.key});
@@ -11,24 +12,95 @@ class DoctorProfileScreen extends StatefulWidget {
 }
 
 class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
-  // Dummy doctor data
-  final String doctorName = 'Dr. Adam El-Masry';
-  final String doctorEmail = 'dr.adam@medicalclinic.com';
-  final String doctorPhone = '+20 100 000 0000';
-  final String doctorClinic = 'Cairo Heart Center, Floor 3';
-  final String doctorSpecialty = 'Cardiologist';
-  final int experience = 10;
-  final int totalPatients = 214;
-  final String rating = '4.9';
+  Map<String, dynamic> _doctorProfile = {};
+  bool _isLoading = true;
+  String? _error;
 
-  List<String> specialisations = [
-    'Interventional Cardiology',
-    'Echocardiography',
-    'Cardiac Imaging',
-    'Hypertension',
+  // Default values for missing data
+  final Map<String, dynamic> _defaultProfile = {
+    'username': 'Dr. Unknown',
+    'email': 'doctor@medicalclinic.com',
+    'phone_number': '+20 100 000 0000',
+    'role': 'doctor',
+    'doctor_name': 'Dr. Adam El-Masry',
+    'doctor_email': 'dr.adam@medicalclinic.com',
+    'doctor_phone': '+20 100 000 0000',
+    'specialty': 'General Practitioner',
+    'experience': 5,
+    'total_patients': 0,
+    'rating': '4.5',
+  };
+
+  List<String> _specialisations = [
+    'General Medicine',
+    'Patient Care',
+    'Medical Consultation',
   ];
 
-  // ── Add specialisation dialog ──────────────────────────────────────────────
+  @override
+  void initState() {
+    super.initState();
+    _loadDoctorProfile();
+  }
+
+  Future<void> _loadDoctorProfile() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final profile = await ApiService.getUserProfile();
+
+      if (mounted) {
+        setState(() {
+          _doctorProfile = profile;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _refresh() async {
+    await _loadDoctorProfile();
+  }
+
+  String get _doctorName =>
+      _doctorProfile['doctor_name'] ??
+      _doctorProfile['username'] ??
+      _defaultProfile['doctor_name'];
+
+  String get _doctorEmail =>
+      _doctorProfile['doctor_email'] ??
+      _doctorProfile['email'] ??
+      _defaultProfile['doctor_email'];
+
+  String get _doctorPhone =>
+      _doctorProfile['doctor_phone'] ??
+      _doctorProfile['phone_number'] ??
+      _defaultProfile['doctor_phone'];
+
+  String get _specialty =>
+      _doctorProfile['specialty'] ?? _defaultProfile['specialty'];
+
+  int get _experience =>
+      (_doctorProfile['experience'] ?? _defaultProfile['experience']) as int;
+
+  int get _totalPatients =>
+      (_doctorProfile['total_patients'] ?? _defaultProfile['total_patients'])
+          as int;
+
+  String get _rating =>
+      (_doctorProfile['rating'] ?? _defaultProfile['rating']).toString();
+
+  // Add specialisation dialog
   void _showAddSpecialisationDialog() {
     final controller = TextEditingController();
     showDialog(
@@ -61,14 +133,15 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
             onPressed: () {
               final text = controller.text.trim();
               if (text.isNotEmpty) {
-                setState(() => specialisations.add(text));
+                setState(() => _specialisations.add(text));
               }
               Navigator.pop(ctx);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
             child: const Text('Add', style: TextStyle(color: Colors.white)),
           ),
@@ -79,9 +152,62 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: CircularProgressIndicator(color: Color(0xFF1565C0)),
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return Scaffold(
+        backgroundColor: Colors.white,
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, size: 64, color: Colors.red[400]),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error loading profile',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.red[700],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.red[600]),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: _refresh,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1565C0),
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SafeArea(
+      body: RefreshIndicator(
+        onRefresh: _refresh,
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Column(
@@ -89,7 +215,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
             children: [
               const Gap(40),
 
-              // ── Avatar ──────────────────────────────────────────────────
+              // Avatar
               Container(
                 width: 120,
                 height: 120,
@@ -107,11 +233,11 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _statChip('$totalPatients Patients'),
+                  _statChip('$_totalPatients Patients'),
                   const Gap(10),
-                  _statChip('$experience yrs exp.'),
+                  _statChip('$_experience yrs exp.'),
                   const Gap(10),
-                  _statChip('⭐ $rating'),
+                  _statChip('$_rating'),
                 ],
               ),
 
@@ -127,40 +253,42 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
 
               const Gap(40),
 
-              // ── Info cards ───────────────────────────────────────────────
+              // Info cards
               _buildInfoCard(
                 icon: Icons.person_outline,
                 label: 'Name',
-                value: doctorName,
+                value: _doctorName,
               ),
               const Gap(20),
               _buildInfoCard(
                 icon: Icons.medical_services_outlined,
                 label: 'Specialty',
-                value: doctorSpecialty,
+                value: _specialty,
               ),
               const Gap(20),
               _buildInfoCard(
                 icon: Icons.email_outlined,
                 label: 'Email',
-                value: doctorEmail,
+                value: _doctorEmail,
               ),
               const Gap(20),
               _buildInfoCard(
                 icon: Icons.phone_android_outlined,
                 label: 'Phone',
-                value: doctorPhone,
+                value: _doctorPhone,
               ),
               const Gap(20),
               _buildInfoCard(
                 icon: Icons.local_hospital_outlined,
-                label: 'Clinic',
-                value: doctorClinic,
+                label: 'Role',
+                value:
+                    _doctorProfile['role']?.toString().toUpperCase() ??
+                    'DOCTOR',
               ),
 
               const Gap(30),
 
-              // ── Specialisations section ──────────────────────────────────
+              // Specialisations section
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
@@ -179,8 +307,11 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
                             color: Colors.white.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(Icons.workspace_premium_outlined,
-                              color: Colors.white, size: 28),
+                          child: const Icon(
+                            Icons.workspace_premium_outlined,
+                            color: Colors.white,
+                            size: 28,
+                          ),
                         ),
                         const Gap(15),
                         const Expanded(
@@ -200,8 +331,11 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
                               color: Colors.white.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: const Icon(Icons.add,
-                                color: Colors.white, size: 22),
+                            child: const Icon(
+                              Icons.add,
+                              color: Colors.white,
+                              size: 22,
+                            ),
                           ),
                         ),
                       ],
@@ -210,27 +344,31 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: specialisations
-                          .map((s) => Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.18),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.4),
-                                      width: 1),
+                      children: _specialisations
+                          .map(
+                            (s) => Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.4),
+                                  width: 1,
                                 ),
-                                child: Text(
-                                  s,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                              ),
+                              child: Text(
+                                s,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
                                 ),
-                              ))
+                              ),
+                            ),
+                          )
                           .toList(),
                     ),
                   ],
@@ -239,7 +377,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
 
               const Gap(20),
 
-              // ── Sign out button ──────────────────────────────────────────
+              // Sign out button
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -257,7 +395,8 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
                     backgroundColor: Colors.red[700],
                     elevation: 2,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15)),
+                      borderRadius: BorderRadius.circular(15),
+                    ),
                   ),
                 ),
               ),
@@ -319,21 +458,19 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
   }
 
   Widget _statChip(String label) => Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: AppColors.primary.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(20),
-          border:
-              Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: AppColors.primary,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+    decoration: BoxDecoration(
+      color: AppColors.primary.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(
+        color: AppColors.primary,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
 }

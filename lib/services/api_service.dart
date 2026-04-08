@@ -3,8 +3,9 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://10.0.2.2:8000';
-
+  // static const String baseUrl =
+  //     'http://10.0.0.190:8000'; // Your computer's WiFi IP
+  static const String baseUrl = 'http://10.0.2.2:8000'; // bta3 l emulator
   // ─────────────────────────────────────────────
   // Token helpers
   // ─────────────────────────────────────────────
@@ -44,14 +45,18 @@ class ApiService {
       return data;
     } else if (response.statusCode == 307 || response.statusCode == 308) {
       final location = response.headers['location'] ?? 'unknown';
-      throw Exception('Login request redirected to $location (HTTP ${response.statusCode}). Check the API path.');
+      throw Exception(
+        'Login request redirected to $location (HTTP ${response.statusCode}). Check the API path.',
+      );
     } else {
       try {
         throw Exception(
           json.decode(response.body)['detail'] ?? 'Failed to login',
         );
       } catch (e) {
-        throw Exception('Failed to login: ${response.statusCode} - ${response.body.isEmpty ? 'Empty response' : response.body}');
+        throw Exception(
+          'Failed to login: ${response.statusCode} - ${response.body.isEmpty ? 'Empty response' : response.body}',
+        );
       }
     }
   }
@@ -92,15 +97,20 @@ class ApiService {
 
     if (response.statusCode == 307 || response.statusCode == 308) {
       final location = response.headers['location'] ?? 'unknown';
-      throw Exception('Signup request redirected to $location (HTTP ${response.statusCode}). Check the API path and trailing slash.');
+      throw Exception(
+        'Signup request redirected to $location (HTTP ${response.statusCode}). Check the API path and trailing slash.',
+      );
     }
 
     if (response.statusCode != 201) {
       try {
-        final error = json.decode(response.body)['detail'] ?? 'Failed to sign up';
+        final error =
+            json.decode(response.body)['detail'] ?? 'Failed to sign up';
         throw Exception(error);
       } catch (e) {
-        throw Exception('Failed to sign up: ${response.statusCode} - ${response.body.isEmpty ? 'Empty response' : response.body}');
+        throw Exception(
+          'Failed to sign up: ${response.statusCode} - ${response.body.isEmpty ? 'Empty response' : response.body}',
+        );
       }
     }
   }
@@ -601,10 +611,14 @@ class ApiService {
   // ─────────────────────────────────────────────
 
   /// Get all doctors (for patient selection).
-  static Future<List<dynamic>> getDoctors() async {
+  static Future<List<dynamic>> getDoctors({String? search}) async {
     final token = await getToken();
+    final url = search != null
+        ? Uri.parse('$baseUrl/doctors?search=$search')
+        : Uri.parse('$baseUrl/doctors/');
+
     final response = await http.get(
-      Uri.parse('$baseUrl/doctors/'),
+      url,
       headers: {'Authorization': 'Bearer $token'},
     );
 
@@ -627,6 +641,50 @@ class ApiService {
       return json.decode(response.body);
     } else {
       throw Exception('Failed to load doctor details');
+    }
+  }
+
+  /// Create a new doctor (for patient use).
+  static Future<Map<String, dynamic>> createDoctor({
+    required String name,
+    required String email,
+    required String phoneNumber,
+  }) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/doctors/'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: json.encode({
+        'name': name,
+        'email': email,
+        'phone_number': phoneNumber,
+      }),
+    );
+
+    if (response.statusCode == 201) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to create doctor');
+    }
+  }
+
+  /// Update user's assigned doctor.
+  static Future<void> updateUserDoctor(int doctorId) async {
+    final token = await getToken();
+    final response = await http.patch(
+      Uri.parse('$baseUrl/users/me'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: json.encode({'doctor_id': doctorId}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update assigned doctor');
     }
   }
 
