@@ -7,9 +7,9 @@ from typing import List
 
 
 
-router = APIRouter(prefix="/patients" , tags=['Contact'])
+router = APIRouter(prefix="/contacts" , tags=['Contact'])
 
-@router.post("/createpatient",status_code = status.HTTP_201_CREATED,response_model = schemas.PatientOut)
+@router.post("/createcontacts",status_code = status.HTTP_201_CREATED,response_model = schemas.ContactOut)
 def create_contact(contact: schemas.Contact, db:Session = Depends(database.get_db), current_user:int= Depends(oauth2.get_current_user)):
     new_contact = models.Contact(owner_id = current_user.id , **contact.dict())
     db.add(new_contact)

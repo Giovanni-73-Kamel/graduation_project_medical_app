@@ -8,7 +8,7 @@ import bcrypt
 from routers.patient_mode import chat, contact, reminder
 
 
-# models.Base.metadata.create_all(bind=engine) 
+models.Base.metadata.create_all(bind=engine) 
 
 app = FastAPI()
 # print(bcrypt.__version__)  # should print a version like 4.x

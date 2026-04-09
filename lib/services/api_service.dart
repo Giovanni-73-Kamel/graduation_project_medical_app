@@ -113,6 +113,16 @@ class ApiService {
         );
       }
     }
+
+    // Save token after successful signup
+    try {
+      final data = json.decode(response.body);
+      if (data['access_token'] != null) {
+        await saveToken(data['access_token']);
+      }
+    } catch (e) {
+      // Continue even if token extraction fails
+    }
   }
 
   // ─────────────────────────────────────────────
