@@ -5,10 +5,11 @@ import app.models as models
 from routers import post, user , auth ,vote
 import bcrypt
 
+from routers.doctor_mode import appointments, patients
 from routers.patient_mode import chat, contact, reminder
 
 
-models.Base.metadata.create_all(bind=engine) 
+# models.Base.metadata.create_all(bind=engine) 
 
 app = FastAPI()
 # print(bcrypt.__version__)  # should print a version like 4.x
@@ -30,6 +31,9 @@ app.include_router(vote.router)
 app.include_router(reminder.router)
 app.include_router(contact.router)
 app.include_router(chat.router)
+app.include_router(patients.router)
+app.include_router(appointments.router)
+
 
 
 

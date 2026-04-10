@@ -19,12 +19,11 @@ class AppointmentModel {
   factory AppointmentModel.fromJson(Map<String, dynamic> json) {
     return AppointmentModel(
       id: json['id'] ?? 0,
-      patientName:
-          json['patient_name'] ?? json['patientName'] ?? 'Unknown Patient',
+      patientName: json['patient_name'] ?? 'Unknown Patient',
       date: json['date'] ?? '',
       time: json['time'] ?? '',
-      note: json['note'] ?? '',
-      type: json['type'] ?? 'checkup',
+      note: json['title'] ?? '', // Use title as note
+      type: 'checkup', // Default type since backend doesn't specify
     );
   }
 

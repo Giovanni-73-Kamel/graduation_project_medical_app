@@ -187,7 +187,7 @@ class ApiService {
   static Future<void> createReminder(Map<String, dynamic> reminderData) async {
     final token = await getToken();
     final response = await http.post(
-      Uri.parse('$baseUrl/reminders/'),
+      Uri.parse('$baseUrl/reminders/createreminders'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
@@ -226,7 +226,7 @@ class ApiService {
   static Future<void> deleteReminder(int id) async {
     final token = await getToken();
     final response = await http.delete(
-      Uri.parse('$baseUrl/reminders/$id'),
+      Uri.parse('$baseUrl/reminders/deletereminder/$id'),
       headers: {'Authorization': 'Bearer $token'},
     );
 
@@ -329,7 +329,7 @@ class ApiService {
   ) async {
     final token = await getToken();
     final response = await http.post(
-      Uri.parse('$baseUrl/appointments/'),
+      Uri.parse('$baseUrl/appointments/createappointment/'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
@@ -417,7 +417,7 @@ class ApiService {
   ) async {
     final token = await getToken();
     final response = await http.post(
-      Uri.parse('$baseUrl/patients/'),
+      Uri.parse('$baseUrl/patients/createpatients'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',

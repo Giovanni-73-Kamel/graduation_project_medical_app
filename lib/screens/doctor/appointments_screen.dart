@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:medical/models/appointment_model.dart';
 import 'package:medical/services/api_service.dart';
 import 'package:medical/widgets/appointment_card.dart';
+import 'package:medical/screens/doctor/add_appointment_screen.dart';
 
 class AppointmentsScreen extends StatefulWidget {
   const AppointmentsScreen({super.key});
@@ -51,6 +52,17 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
 
   Future<void> _refresh() async {
     await _loadAppointments();
+  }
+
+  Future<void> _addAppointment() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const AddAppointmentScreen()),
+    );
+
+    if (result == true) {
+      _loadAppointments(); // Refresh the appointments list
+    }
   }
 
   @override
@@ -115,6 +127,13 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _addAppointment,
+        backgroundColor: const Color(0xFF1565C0),
+        foregroundColor: Colors.white,
+        elevation: 4,
+        child: const Icon(Icons.add),
+      ),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: CustomScrollView(

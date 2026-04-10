@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:medical/models/patient_model.dart';
-import 'package:medical/widgets/vital_card.dart';
 
 class PatientDetailsScreen extends StatelessWidget {
   final PatientModel patient;
@@ -71,7 +70,7 @@ class PatientDetailsScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Age ${patient.age}',
+                      'Contact: ${patient.phone}',
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.8),
                         fontSize: 14,
@@ -100,33 +99,21 @@ class PatientDetailsScreen extends StatelessWidget {
                   ]),
                   const SizedBox(height: 24),
 
-                  // Vital signs
-                  _sectionTitle('Vital Signs'),
+                  // Additional notes section
+                  _sectionTitle('Additional Information'),
                   const SizedBox(height: 10),
-                  VitalCard(
-                    icon: Icons.favorite_rounded,
-                    label: 'Heart Rate',
-                    value: '${patient.heartRate}',
-                    unit: 'bpm',
-                    color: const Color(0xFFE53935),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'Patient records and medical history can be accessed here.',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  VitalCard(
-                    icon: Icons.monitor_heart_outlined,
-                    label: 'Blood Pressure',
-                    value: patient.bloodPressure,
-                    unit: 'mmHg',
-                    color: accentColor,
-                  ),
-                  const SizedBox(height: 12),
-                  VitalCard(
-                    icon: Icons.thermostat_rounded,
-                    label: 'Body Temperature',
-                    value: '${patient.temperature}',
-                    unit: '°C',
-                    color: const Color(0xFFFF8F00),
-                  ),
-                  const SizedBox(height: 30),
                 ],
               ),
             ),
@@ -137,51 +124,59 @@ class PatientDetailsScreen extends StatelessWidget {
   }
 
   Widget _sectionTitle(String title) => Text(
-        title,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w700,
-          color: Color(0xFF1A2A3A),
-          letterSpacing: 0.3,
-        ),
-      );
+    title,
+    style: const TextStyle(
+      fontSize: 16,
+      fontWeight: FontWeight.w700,
+      color: Color(0xFF1A2A3A),
+      letterSpacing: 0.3,
+    ),
+  );
 
   Widget _infoCard(List<Widget> children) => Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 3),
-            ),
-          ],
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.06),
+          blurRadius: 12,
+          offset: const Offset(0, 3),
         ),
-        child: Column(children: children),
-      );
+      ],
+    ),
+    child: Column(children: children),
+  );
 
   Widget _infoRow(IconData icon, String label, String value) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    child: Row(
+      children: [
+        Icon(icon, size: 20, color: const Color(0xFF1565C0)),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 20, color: const Color(0xFF1565C0)),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style:
-                        TextStyle(fontSize: 11, color: Colors.grey[500], fontWeight: FontWeight.w500)),
-                const SizedBox(height: 2),
-                Text(value,
-                    style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1A2A3A))),
-              ],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.grey[500],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1A2A3A),
+              ),
             ),
           ],
         ),
-      );
+      ],
+    ),
+  );
 }

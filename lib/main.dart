@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:medical/home_pages/home.dart';
-import 'package:medical/home_pages/profile.dart';
 import 'package:medical/auth_pages/login.dart';
-import 'package:medical/screens/doctor/doctor_home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

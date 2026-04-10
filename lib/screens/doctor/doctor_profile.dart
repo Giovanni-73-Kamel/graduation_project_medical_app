@@ -52,9 +52,19 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
     try {
       final profile = await ApiService.getUserProfile();
 
+      // Get actual patient count
+      int patientCount = 0;
+      try {
+        final patients = await ApiService.getPatients();
+        patientCount = patients.length;
+      } catch (e) {
+        // If we can't get patients, just use 0
+        print('Failed to load patients for profile: $e');
+      }
+
       if (mounted) {
         setState(() {
-          _doctorProfile = profile;
+          _doctorProfile = {...profile, 'total_patients': patientCount};
           _isLoading = false;
         });
       }

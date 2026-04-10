@@ -76,3 +76,16 @@ class Reminder(Base) :
     notes = Column(String,nullable=True)    
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
     owner_id = Column(Integer, ForeignKey("users.id",ondelete="CASCADE"),nullable=False)
+
+class Appointment(Base):
+    __tablename__ = "appointments"
+
+    id = Column(Integer, nullable=False,primary_key=True )
+    title = Column(String,nullable=False)
+    doctor_id = Column(Integer, ForeignKey("users.id",ondelete="CASCADE"),nullable=False)
+    patient_id = Column(Integer, ForeignKey("users.id",ondelete="CASCADE"),nullable=False)
+    date = Column(String,nullable=False)
+    time_hour = Column(Integer,nullable=False)
+    time_minute = Column(Integer,nullable=False)
+    notes = Column(String,nullable=True)    
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))

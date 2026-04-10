@@ -8,7 +8,7 @@ from typing import List
 router = APIRouter(prefix="/reminders" , tags=['Reminder'])
 
 
-@router.post("/",status_code=status.HTTP_201_CREATED,response_model=schemas.ReminderOut)
+@router.post("/createreminders",status_code=status.HTTP_201_CREATED,response_model=schemas.ReminderOut)
 def create_reminder(
     reminder: schemas.Reminder, db:Session = Depends(database.get_db),
     current_user:int= Depends(oauth2.get_current_user)):
@@ -41,7 +41,7 @@ def get_contacts(db:Session = Depends(database.get_db),current_user:int = Depend
     reminders = db.query(models.Reminder).filter(models.Reminder.owner_id==current_user.id).all()
     return reminders
 
-@router.delete("/{id}",status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/deletereminder/{id}",status_code=status.HTTP_204_NO_CONTENT)
 def delete_reminder(id:int, db:Session= Depends(database.get_db),current_user:int = Depends(oauth2.get_current_user)):
     reminder_query = db.query(models.Reminder).filter(models.Reminder.id == id )
     reminder = reminder_query.first()

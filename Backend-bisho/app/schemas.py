@@ -77,16 +77,14 @@ class ContactOut(BaseModel):
         from_attributes = True
 
 class Patient(BaseModel):
-    name: str
-    type: str
-    phone: str
+    username: str
+    phone_number: str
     email: str
 
 class PatientOut(BaseModel):
-    name: str
+    username: str
     id : int
-    type: str
-    phone: str
+    phone_number: str
     email: str
 
     class Config:
@@ -106,7 +104,7 @@ class ReminderOut(BaseModel):
     title : str
     id : int
     type: str
-    date: datetime
+    date: str
     time_hour: int
     time_minute: int
     frequency: str
@@ -115,3 +113,20 @@ class ReminderOut(BaseModel):
     class Config:
         from_attributes = True
 
+class Appointment(BaseModel):
+    patient_id: int
+    date: str
+    time_hour: int
+    time_minute: int
+    title: str
+    
+class AppointmentOut(BaseModel):
+    id: int
+    patient_id: int
+    date: str
+    time_hour: int
+    time_minute: int
+    title: str
+    doctor_id: int
+    class Config:
+        from_attributes = True

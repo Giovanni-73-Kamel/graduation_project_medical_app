@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:medical/models/patient_model.dart';
 import 'package:medical/services/api_service.dart';
 import 'package:medical/screens/doctor/patient_details_screen.dart';
+import 'package:medical/screens/doctor/add_patient_screen.dart';
 import 'package:medical/widgets/patient_card.dart';
 
 class PatientsScreen extends StatefulWidget {
@@ -53,6 +54,17 @@ class _PatientsScreenState extends State<PatientsScreen> {
 
   Future<void> _refresh() async {
     await _loadPatients();
+  }
+
+  Future<void> _addPatient() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const AddPatientScreen()),
+    );
+
+    if (result == true) {
+      _loadPatients(); // Refresh the patients list
+    }
   }
 
   List<PatientModel> get _filtered => _patients
@@ -115,6 +127,13 @@ class _PatientsScreenState extends State<PatientsScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _addPatient,
+        backgroundColor: const Color(0xFF1565C0),
+        foregroundColor: Colors.white,
+        elevation: 4,
+        child: const Icon(Icons.add),
+      ),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: CustomScrollView(
