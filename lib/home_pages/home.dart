@@ -2,11 +2,11 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:medical/functions/app_colors.dart';
 import 'package:medical/functions/custom_text.dart';
+import 'package:medical/home_pages/my_heart.dart';
 import 'package:medical/home_pages/profile.dart';
 import 'package:medical/Ai_bot/chatbot_widget.dart';
 import 'package:medical/home_pages/scheduled.dart';
 import 'package:medical/home_pages/contacts.dart';
-import 'package:medical/home_pages/help.dart';
 import 'package:medical/services/api_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -24,9 +24,9 @@ class _HomeViewState extends State<HomeView> {
 
   final List<Widget> _pages = [
     const HomePage(),
+    const MyHeartPage(),
     const ContactsPage(),
     const ScheduledPage(),
-    const HelpPage(),
     const ProfileView(),
   ];
 
@@ -68,6 +68,10 @@ class _HomeViewState extends State<HomeView> {
                   activeIcon: Icon(Icons.home),
                   label: 'Home'),
               BottomNavigationBarItem(
+                  icon: Icon(Icons.monitor_heart_outlined),
+                  activeIcon: Icon(Icons.monitor_heart),
+                  label: 'My Heart'),
+              BottomNavigationBarItem(
                   icon: Icon(Icons.contacts_outlined),
                   activeIcon: Icon(Icons.contacts),
                   label: 'Contacts'),
@@ -75,10 +79,6 @@ class _HomeViewState extends State<HomeView> {
                   icon: Icon(Icons.calendar_today_outlined),
                   activeIcon: Icon(Icons.calendar_today),
                   label: 'Scheduled'),
-              BottomNavigationBarItem(
-                  icon: Icon(Icons.help_outline),
-                  activeIcon: Icon(Icons.help),
-                  label: 'Help'),
               BottomNavigationBarItem(
                   icon: Icon(Icons.person_outline),
                   activeIcon: Icon(Icons.person),
@@ -680,7 +680,7 @@ class _EcgPainter extends CustomPainter {
 
     // One full ECG cycle normalised to width 1.0
     // Points: (x, y) fractions of size
-    List<Offset> _ecgPattern(double offsetX) {
+    List<Offset> ecgPattern(double offsetX) {
       return [
         Offset(offsetX + 0.00 * w, mid),
         Offset(offsetX + 0.08 * w, mid),
@@ -700,7 +700,7 @@ class _EcgPainter extends CustomPainter {
     // Two cycles offset by progress for seamless scrolling
     for (int cycle = -1; cycle <= 1; cycle++) {
       final ox = (-progress + cycle) * w;
-      final pts = _ecgPattern(ox);
+      final pts = ecgPattern(ox);
       for (int i = 0; i < pts.length - 1; i++) {
         canvas.drawLine(pts[i], pts[i + 1], glowPaint);
         canvas.drawLine(pts[i], pts[i + 1], paint);
@@ -903,64 +903,4 @@ class _CircleArcPainter extends CustomPainter {
   @override
   bool shouldRepaint(_CircleArcPainter old) =>
       old.value != value || old.glow != glow;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Unused legacy pages kept to avoid tree-shake warnings
-// ─────────────────────────────────────────────────────────────────────────────
-class _UnusedHelpPage extends StatelessWidget {
-  const _UnusedHelpPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const CustomText(
-                text: 'Help',
-                color: Colors.black87,
-                size: 28,
-                weight: FontWeight.bold),
-            const SizedBox(height: 20),
-            Expanded(
-              child: Center(
-                  child: Icon(Icons.help, size: 100, color: AppColors.primary)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _UnusedProfilePage extends StatelessWidget {
-  const _UnusedProfilePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const CustomText(
-                text: 'Profile',
-                color: Colors.black87,
-                size: 28,
-                weight: FontWeight.bold),
-            const SizedBox(height: 20),
-            Expanded(
-              child: Center(
-                  child:
-                      Icon(Icons.person, size: 100, color: AppColors.primary)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

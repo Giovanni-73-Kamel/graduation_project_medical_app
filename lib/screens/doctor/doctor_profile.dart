@@ -31,7 +31,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
     'rating': '4.5',
   };
 
-  List<String> _specialisations = [
+  final List<String> _specialisations = [
     'General Medicine',
     'Patient Care',
     'Medical Consultation',
@@ -247,7 +247,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
                   const Gap(10),
                   _statChip('$_experience yrs exp.'),
                   const Gap(10),
-                  _statChip('$_rating'),
+                  _statChip(_rating),
                 ],
               ),
 

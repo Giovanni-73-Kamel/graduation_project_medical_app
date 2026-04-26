@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:medical/auth_pages/login.dart';
+import 'package:medical/home_pages/home.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,7 +18,7 @@ class MyApp extends StatelessWidget {
       title: "Health Tracker",
 
       // home: DoctorHomeScreen(),
-      home: LoginView(),
+      home: HomeView(),
     );
   }
 }

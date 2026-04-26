@@ -784,4 +784,154 @@ class ApiService {
       throw Exception('Failed to load users');
     }
   }
+
+  // ─────────────────────────────────────────────
+  // ECG / Heart Condition API  →  /ecg/
+  // ─────────────────────────────────────────────
+
+  /// GET /ecg/classifications
+  ///
+  /// Returns the list of ECG record-level classification definitions
+  /// (NORM, MI, STTC, CD, HYP) from the backend.
+  ///
+  /// Falls back to [_localEcgClassifications] when the backend is not yet
+  /// available, so the UI always has data to display.
+  static Future<List<Map<String, dynamic>>> getEcgClassifications() async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/ecg/classifications'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        return List<Map<String, dynamic>>.from(json.decode(response.body));
+      }
+    } catch (_) {
+      // Backend not reachable – fall through to local data
+    }
+    return _localEcgClassifications;
+  }
+
+  /// GET /ecg/classification-levels
+  ///
+  /// Returns the beat-level and record-level classification groups used in
+  /// the "Important Difference" section of the Heart Condition page.
+  ///
+  /// Falls back to [_localClassificationLevels] when the backend is not yet
+  /// available.
+  static Future<List<Map<String, dynamic>>> getClassificationLevels() async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/ecg/classification-levels'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        return List<Map<String, dynamic>>.from(json.decode(response.body));
+      }
+    } catch (_) {
+      // Backend not reachable – fall through to local data
+    }
+    return _localClassificationLevels;
+  }
+
+  /// GET /ecg/current-condition
+  ///
+  /// Returns the current dynamic heart condition for the user from the smartwatch.
+  static Future<Map<String, dynamic>> getCurrentHeartCondition() async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/ecg/current-condition'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      }
+    } catch (_) {
+      // Backend not reachable – fall through to local data
+    }
+    return _localCurrentCondition;
+  }
+
+  // ── Local fallback data (mirrors expected backend JSON shape) ─────────────
+
+  static const List<Map<String, dynamic>> _localEcgClassifications = [
+    {
+      'code': 'NORM',
+      'label': 'Normal ECG',
+      'description':
+          "No clear abnormalities detected. The heart's electrical activity follows a healthy, regular pattern.",
+      'color_hex': '#00C853',
+      'icon_name': 'check_circle_outline',
+    },
+    {
+      'code': 'MI',
+      'label': 'Myocardial Infarction',
+      'description':
+          'Indicates a heart attack. Blood supply to part of the heart muscle has been blocked, causing damage.',
+      'color_hex': '#E53935',
+      'icon_name': 'warning_amber_rounded',
+    },
+    {
+      'code': 'STTC',
+      'label': 'ST/T Wave Changes',
+      'description':
+          'May suggest ischemia or early cardiac issues. Changes in the ST segment and T wave of the ECG.',
+      'color_hex': '#FF6F00',
+      'icon_name': 'show_chart',
+    },
+    {
+      'code': 'CD',
+      'label': 'Conduction Disturbance',
+      'description':
+          "Problems in the heart's electrical signal pathway, leading to abnormal timing of heartbeats.",
+      'color_hex': '#7B1FA2',
+      'icon_name': 'electric_bolt_outlined',
+    },
+    {
+      'code': 'HYP',
+      'label': 'Hypertrophy',
+      'description':
+          'Enlargement of the heart muscle, often due to prolonged high blood pressure or valve disease.',
+      'color_hex': '#0288D1',
+      'icon_name': 'favorite_border',
+    },
+  ];
+
+  static const List<Map<String, dynamic>> _localClassificationLevels = [
+    {
+      'level_type': 'beat',
+      'title': 'Beat-Level Classification',
+      'subtitle': 'Classifies a single heartbeat',
+      'codes': [
+        {'code': 'N', 'color_hex': '#00C853'},
+        {'code': 'S', 'color_hex': '#0288D1'},
+        {'code': 'V', 'color_hex': '#E53935'},
+        {'code': 'F', 'color_hex': '#FF6F00'},
+        {'code': 'Q', 'color_hex': '#607D8B'},
+      ],
+    },
+    {
+      'level_type': 'record',
+      'title': 'Record-Level Classification',
+      'subtitle': 'Classifies the entire ECG recording',
+      'codes': [
+        {'code': 'NORM', 'color_hex': '#00C853'},
+        {'code': 'MI',   'color_hex': '#E53935'},
+        {'code': 'STTC', 'color_hex': '#FF6F00'},
+        {'code': 'CD',   'color_hex': '#7B1FA2'},
+        {'code': 'HYP',  'color_hex': '#0288D1'},
+      ],
+    },
+  ];
+
+static const Map<String, dynamic> _localCurrentCondition = {
+   'code': 'HYP',
+      'label': 'Hypertrophy',
+      'description':
+          'Enlargement of the heart muscle, often due to prolonged high blood pressure or valve disease.',
+      'color_hex': '#0288D1',
+      'icon_name': 'favorite_border',
+  };
 }

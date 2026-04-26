@@ -7,7 +7,6 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart'
     as fln;
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
-import 'package:flutter_timezone/flutter_timezone.dart';
 import 'dart:math';
 
 /// Global notification plugin instance
@@ -70,7 +69,9 @@ class _ScheduledPageState extends State<ScheduledPage> {
           iOS: initializationSettingsIOS,
         );
 
-    await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+    await flutterLocalNotificationsPlugin.initialize(
+      initializationSettings,
+    );
     await _createNotificationChannel();
 
     tz.initializeTimeZones();
@@ -342,51 +343,65 @@ class _ScheduledPageState extends State<ScheduledPage> {
         ),
       );
 
-      switch (item.frequency.toLowerCase()) {
-        case 'once':
-          await flutterLocalNotificationsPlugin.zonedSchedule(
-            item.id,
-            notificationTitle,
-            notificationBody,
-            tzNotificationTime,
-            notificationDetails,
-            androidScheduleMode: fln.AndroidScheduleMode.exactAllowWhileIdle,
-          );
-          break;
-        case 'daily':
-          await flutterLocalNotificationsPlugin.zonedSchedule(
-            item.id,
-            notificationTitle,
-            notificationBody,
-            tzNotificationTime,
-            notificationDetails,
-            androidScheduleMode: fln.AndroidScheduleMode.exactAllowWhileIdle,
-            matchDateTimeComponents: fln.DateTimeComponents.time,
-          );
-          break;
-        case 'weekly':
-          await flutterLocalNotificationsPlugin.zonedSchedule(
-            item.id,
-            notificationTitle,
-            notificationBody,
-            tzNotificationTime,
-            notificationDetails,
-            androidScheduleMode: fln.AndroidScheduleMode.exactAllowWhileIdle,
-            matchDateTimeComponents: fln.DateTimeComponents.dayOfWeekAndTime,
-          );
-          break;
-        case 'monthly':
-          await flutterLocalNotificationsPlugin.zonedSchedule(
-            item.id,
-            notificationTitle,
-            notificationBody,
-            tzNotificationTime,
-            notificationDetails,
-            androidScheduleMode: fln.AndroidScheduleMode.exactAllowWhileIdle,
-            matchDateTimeComponents: fln.DateTimeComponents.dayOfMonthAndTime,
-          );
-          break;
-      }
+switch (item.frequency.toLowerCase()) {
+  case 'once':
+    await flutterLocalNotificationsPlugin.zonedSchedule(
+      item.id,
+      notificationTitle,
+      notificationBody,
+      tzNotificationTime,
+      notificationDetails,
+      androidScheduleMode: fln.AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          fln.UILocalNotificationDateInterpretation.absoluteTime,
+    );
+    break;
+
+  case 'daily':
+    await flutterLocalNotificationsPlugin.zonedSchedule(
+      item.id,
+      notificationTitle,
+      notificationBody,
+      tzNotificationTime,
+      notificationDetails,
+      androidScheduleMode: fln.AndroidScheduleMode.exactAllowWhileIdle,
+      matchDateTimeComponents: fln.DateTimeComponents.time,
+      uiLocalNotificationDateInterpretation:
+          fln.UILocalNotificationDateInterpretation.absoluteTime,
+    );
+    break;
+
+  case 'weekly':
+    await flutterLocalNotificationsPlugin.zonedSchedule(
+      item.id,
+      notificationTitle,
+      notificationBody,
+      tzNotificationTime,
+      notificationDetails,
+      androidScheduleMode: fln.AndroidScheduleMode.exactAllowWhileIdle,
+      matchDateTimeComponents:
+          fln.DateTimeComponents.dayOfWeekAndTime,
+      uiLocalNotificationDateInterpretation:
+          fln.UILocalNotificationDateInterpretation.absoluteTime,
+    );
+    break;
+
+  case 'monthly':
+    await flutterLocalNotificationsPlugin.zonedSchedule(
+      item.id,
+      notificationTitle,
+      notificationBody,
+      tzNotificationTime,
+      notificationDetails,
+      androidScheduleMode: fln.AndroidScheduleMode.exactAllowWhileIdle,
+      matchDateTimeComponents:
+          fln.DateTimeComponents.dayOfMonthAndTime,
+      uiLocalNotificationDateInterpretation:
+          fln.UILocalNotificationDateInterpretation.absoluteTime,
+    );
+    break;
+}
+
     } catch (e) {
       debugPrint('Error scheduling notification: $e');
       if (mounted) {
