@@ -22,9 +22,13 @@ class _SignUpViewState extends State<SignUpView> {
   final phoneController = TextEditingController();
   final passController = TextEditingController();
   final confirmPassController = TextEditingController();
+  final heightController = TextEditingController();
+  final weightController = TextEditingController();
   final formKey = GlobalKey<FormState>();
   bool isDoctor = false;
   DateTime? _selectedDate;
+  String _heightUnit = 'cm';   // 'cm' or 'in'
+  String _weightUnit = 'kg';   // 'kg' or 'lbs'
 
   @override
   void dispose() {
@@ -33,6 +37,8 @@ class _SignUpViewState extends State<SignUpView> {
     phoneController.dispose();
     passController.dispose();
     confirmPassController.dispose();
+    heightController.dispose();
+    weightController.dispose();
     super.dispose();
   }
 
@@ -90,6 +96,23 @@ class _SignUpViewState extends State<SignUpView> {
     final dob =
         "${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}";
 
+    // Build height/weight strings with their units
+    final heightValue = heightController.text.trim();
+    final weightValue = weightController.text.trim();
+    final heightStr = heightValue.isEmpty ? '' : '$heightValue $_heightUnit';
+    final weightStr = weightValue.isEmpty ? '' : '$weightValue $_weightUnit';
+    
+    // Auto-calculate age from the selected date of birth
+    final age = DateTime.now().year - _selectedDate!.year;
+    final birthMonth = _selectedDate!.month;
+    final birthDay = _selectedDate!.day;
+    final now = DateTime.now();
+    int calculatedAge = age;
+    if (now.month < birthMonth || (now.month == birthMonth && now.day < birthDay)) {
+      calculatedAge--;
+    }
+    final ageStr = calculatedAge.toString();
+
     if (isDoctor) {
       // Doctor: Skip step 2, create account directly and go to doctor home
       try {
@@ -100,6 +123,9 @@ class _SignUpViewState extends State<SignUpView> {
           phoneNumber: phoneController.text.trim(),
           role: 'doctor',
           dateOfBirth: dob,
+          age: ageStr,
+          height: heightStr,
+          weight: weightStr,
           // Provide empty strings for doctor/emergency info since skipping step 2
           doctorName: '',
           doctorEmail: '',
@@ -142,6 +168,9 @@ class _SignUpViewState extends State<SignUpView> {
             phoneNumber: phoneController.text.trim(),
             role: 'patient',
             dateOfBirth: dob,
+            age: ageStr,
+            height: heightStr,
+            weight: weightStr,
           ),
         ),
       );
@@ -365,6 +394,131 @@ class _SignUpViewState extends State<SignUpView> {
                         ],
                       ),
                     ),
+                  ),
+
+                  const Gap(18),
+
+
+
+                  // ── Height & Weight (same row) ──
+                  Row(
+                    children: [
+                      // Height
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: AppColors.primary, width: 2),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TextFormField(
+                                  controller: heightController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: InputDecoration(
+                                    hintText: 'Height',
+                                    hintStyle: TextStyle(
+                                      color: Colors.grey.shade500,
+                                      fontSize: 15,
+                                    ),
+                                    border: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 15,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              // Unit toggle (cm / in)
+                              GestureDetector(
+                                onTap: () => setState(() {
+                                  _heightUnit = _heightUnit == 'cm' ? 'in' : 'cm';
+                                }),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 8,
+                                  ),
+                                  margin: const EdgeInsets.only(right: 6),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    _heightUnit,
+                                    style: TextStyle(
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const Gap(12),
+
+                      // Weight
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: AppColors.primary, width: 2),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TextFormField(
+                                  controller: weightController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: InputDecoration(
+                                    hintText: 'Weight',
+                                    hintStyle: TextStyle(
+                                      color: Colors.grey.shade500,
+                                      fontSize: 15,
+                                    ),
+                                    border: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 15,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              // Unit toggle (kg / lbs)
+                              GestureDetector(
+                                onTap: () => setState(() {
+                                  _weightUnit = _weightUnit == 'kg' ? 'lbs' : 'kg';
+                                }),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 8,
+                                  ),
+                                  margin: const EdgeInsets.only(right: 6),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    _weightUnit,
+                                    style: TextStyle(
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
 
                   const Gap(18),

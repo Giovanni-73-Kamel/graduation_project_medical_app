@@ -7,6 +7,7 @@ import 'package:medical/home_pages/profile.dart';
 import 'package:medical/Ai_bot/chatbot_widget.dart';
 import 'package:medical/home_pages/scheduled.dart';
 import 'package:medical/home_pages/contacts.dart';
+import 'package:medical/home_pages/settings.dart';
 import 'package:medical/services/api_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -30,11 +31,65 @@ class _HomeViewState extends State<HomeView> {
     const ProfileView(),
   ];
 
+  void _openSettings() {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierDismissible: true,
+        pageBuilder: (_, __, ___) => const SettingsPage(),
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final settings = SettingsScope.of(context);
+    final isDark = settings.isDarkMode;
+
     return Scaffold(
-      backgroundColor: Colors.grey[100],
-      body: _pages[_currentIndex],
+      backgroundColor: isDark ? const Color(0xFF0F1923) : Colors.grey[100],
+      body: Stack(
+        children: [
+          _pages[_currentIndex],
+          // ── Settings icon (top-left) ──────────────────────────────────
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            left: 12,
+            child: GestureDetector(
+              onTap: _openSettings,
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.white.withOpacity(0.1)
+                      : Colors.white.withOpacity(0.85),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withOpacity(0.12)
+                        : AppColors.primary.withOpacity(0.15),
+                    width: 1.2,
+                  ),
+                ),
+                child: Icon(
+                  Icons.settings_rounded,
+                  color: isDark ? Colors.white : AppColors.primary,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
       bottomNavigationBar: Container(
         margin: const EdgeInsets.all(0),
         decoration: BoxDecoration(
@@ -62,27 +117,27 @@ class _HomeViewState extends State<HomeView> {
             unselectedFontSize: 13,
             iconSize: 28,
             elevation: 0,
-            items: const [
+            items: [
               BottomNavigationBarItem(
-                  icon: Icon(Icons.home_outlined),
-                  activeIcon: Icon(Icons.home),
-                  label: 'Home'),
+                  icon: const Icon(Icons.home_outlined),
+                  activeIcon: const Icon(Icons.home),
+                  label: settings.t('nav_home')),
               BottomNavigationBarItem(
-                  icon: Icon(Icons.monitor_heart_outlined),
-                  activeIcon: Icon(Icons.monitor_heart),
-                  label: 'My Heart'),
+                  icon: const Icon(Icons.monitor_heart_outlined),
+                  activeIcon: const Icon(Icons.monitor_heart),
+                  label: settings.t('nav_my_heart')),
               BottomNavigationBarItem(
-                  icon: Icon(Icons.contacts_outlined),
-                  activeIcon: Icon(Icons.contacts),
-                  label: 'Contacts'),
+                  icon: const Icon(Icons.contacts_outlined),
+                  activeIcon: const Icon(Icons.contacts),
+                  label: settings.t('nav_contacts')),
               BottomNavigationBarItem(
-                  icon: Icon(Icons.calendar_today_outlined),
-                  activeIcon: Icon(Icons.calendar_today),
-                  label: 'Scheduled'),
+                  icon: const Icon(Icons.calendar_today_outlined),
+                  activeIcon: const Icon(Icons.calendar_today),
+                  label: settings.t('nav_scheduled')),
               BottomNavigationBarItem(
-                  icon: Icon(Icons.person_outline),
-                  activeIcon: Icon(Icons.person),
-                  label: 'Profile'),
+                  icon: const Icon(Icons.person_outline),
+                  activeIcon: const Icon(Icons.person),
+                  label: settings.t('nav_profile')),
             ],
           ),
         ),
@@ -157,11 +212,16 @@ class _HomePageState extends State<HomePage> {
                   )
                 ],
               ),
-              child: CustomText(
-                text: 'Hi, $userName !',
-                color: Colors.white,
-                size: 22,
-                weight: FontWeight.bold,
+              child: Builder(
+                builder: (ctx) {
+                  final s = SettingsScope.of(ctx);
+                  return CustomText(
+                    text: '${s.t('hi')}, $userName !',
+                    color: Colors.white,
+                    size: 22,
+                    weight: FontWeight.bold,
+                  );
+                },
               ),
             ),
 
@@ -171,20 +231,25 @@ class _HomePageState extends State<HomePage> {
             // ── Section header ────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
-              child: Row(
-                children: [
-                  Icon(Icons.monitor_heart_outlined,
-                      color: AppColors.primary, size: 22),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Vital Signs',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1A2A3A),
-                    ),
-                  ),
-                ],
+              child: Builder(
+                builder: (ctx) {
+                  final isDark = SettingsScope.of(ctx).isDarkMode;
+                  return Row(
+                    children: [
+                      Icon(Icons.monitor_heart_outlined,
+                          color: AppColors.primary, size: 22),
+                      const SizedBox(width: 8),
+                      Text(
+                        SettingsScope.of(ctx).t('vital_signs'),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : const Color(0xFF1A2A3A),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
 
@@ -308,9 +373,9 @@ class _BloodPressureWidgetState extends State<BloodPressureWidget>
                         color: Colors.white, size: 22),
                   ),
                   const SizedBox(width: 10),
-                  const Text(
-                    'Blood Pressure',
-                    style: TextStyle(
+                  Text(
+                    SettingsScope.of(context).t('blood_pressure'),
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
@@ -325,9 +390,9 @@ class _BloodPressureWidgetState extends State<BloodPressureWidget>
                       color: Colors.white.withOpacity(0.18),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: const Text(
-                      'Normal',
-                      style: TextStyle(
+                    child: Text(
+                      SettingsScope.of(context).t('normal'),
+                      style: const TextStyle(
                           color: Colors.white,
                           fontSize: 12,
                           fontWeight: FontWeight.w600),
@@ -338,28 +403,29 @@ class _BloodPressureWidgetState extends State<BloodPressureWidget>
 
               const SizedBox(height: 20),
 
-              // Gauge
-              Center(
-                child: CustomPaint(
-                  size: const Size(double.infinity, 140),
-                  painter: _BPGaugePainter(_needleAnim.value),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Readings
+              // ── Values row ─────────────────────────────────────────────────
               Row(
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _bpValue('$systolic', 'SYS', 'mmHg'),
-                  Container(
-                    height: 40,
-                    width: 1.5,
-                    margin: const EdgeInsets.symmetric(horizontal: 20),
-                    color: Colors.white.withOpacity(0.35),
+                  _bpCircle('$systolic', SettingsScope.of(context).t('sys'), 'mmHg', _pulseAnim.value),
+                  const SizedBox(width: 12),
+                  _bpCircle('$diastolic', SettingsScope.of(context).t('dia'), 'mmHg', _pulseAnim.value),
+                  const Spacer(),
+                  // Animated heartbeat icon
+                  AnimatedBuilder(
+                    animation: _pulseCtrl,
+                    builder: (_, __) => Transform.scale(
+                      scale: 0.85 + 0.15 * _pulseAnim.value,
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.18),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.favorite_rounded,
+                            color: Colors.white, size: 30),
+                      ),
+                    ),
                   ),
-                  _bpValue('$diastolic', 'DIA', 'mmHg'),
                 ],
               ),
             ],
@@ -369,153 +435,46 @@ class _BloodPressureWidgetState extends State<BloodPressureWidget>
     );
   }
 
-  Widget _bpValue(String val, String label, String unit) {
-    return Column(
-      children: [
-        Text(
-          val,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 38,
-            fontWeight: FontWeight.bold,
-            height: 1,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '$label · $unit',
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.75),
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// Custom painter for the blood-pressure arc gauge with moving needle
-class _BPGaugePainter extends CustomPainter {
-  final double progress; // 0 → 1
-
-  _BPGaugePainter(this.progress);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final cx = size.width / 2;
-    final cy = size.height - 20;
-    // ensure radius fits inside both width and the available vertical space
-    final radius = min(size.width * 0.42, cy - 14);
-
-    const startAngle = pi; // 180°
-    const sweepAngle = pi; // 180° arc
-
-    // ── Track arc (background) ───────────────────────────────────────────
-    final trackPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 14
-      ..strokeCap = StrokeCap.round
-      ..color = Colors.white.withOpacity(0.18);
-
-    canvas.drawArc(
-      Rect.fromCircle(center: Offset(cx, cy), radius: radius),
-      startAngle,
-      sweepAngle,
-      false,
-      trackPaint,
-    );
-
-    // ── Colour zones (low → normal → high) ───────────────────────────────
-    final zones = [
-      (Colors.lightBlue[200]!, 0.0, pi / 3),       // low – blue
-      (Colors.green[400]!, pi / 3, pi / 3),         // normal – green
-      (Colors.orange[400]!, 2 * pi / 3, pi / 6),   // elevated – orange
-      (Colors.red[400]!, 5 * pi / 6, pi / 6),       // high – red
-    ];
-
-    for (final z in zones) {
-      final zPaint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 14
-        ..strokeCap = StrokeCap.butt
-        ..color = z.$1.withOpacity(0.6);
-      canvas.drawArc(
-        Rect.fromCircle(center: Offset(cx, cy), radius: radius),
-        startAngle + z.$2,
-        z.$3,
-        false,
-        zPaint,
-      );
-    }
-
-    // ── Tick marks ───────────────────────────────────────────────────────
-    final tickPaint = Paint()
-      ..color = Colors.white.withOpacity(0.5)
-      ..strokeWidth = 1.5;
-
-    for (int i = 0; i <= 8; i++) {
-      final angle = startAngle + (i / 8) * sweepAngle;
-      final inner = radius - 10;
-      final outer = radius + 10;
-      canvas.drawLine(
-        Offset(cx + inner * cos(angle), cy + inner * sin(angle)),
-        Offset(cx + outer * cos(angle), cy + outer * sin(angle)),
-        tickPaint,
-      );
-    }
-
-    // ── Animated needle ──────────────────────────────────────────────────
-    // maps from ~0.3 (normal low) to ~0.55 (normal high) swinging
-    final normalizedPos = 0.30 + progress * 0.25;
-    final needleAngle = startAngle + normalizedPos * sweepAngle;
-
-    final needlePaint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawLine(
-      Offset(cx, cy),
-      Offset(
-        cx + (radius - 8) * cos(needleAngle),
-        cy + (radius - 8) * sin(needleAngle),
+  Widget _bpCircle(String val, String label, String unit, double pulse) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.15 + 0.05 * pulse),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.3), width: 1.5),
       ),
-      needlePaint,
+      child: Column(
+        children: [
+          Text(
+            val,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 36,
+              fontWeight: FontWeight.bold,
+              height: 1,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.9),
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.0,
+            ),
+          ),
+          Text(
+            unit,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.6),
+              fontSize: 10,
+            ),
+          ),
+        ],
+      ),
     );
-
-    // pivot dot
-    canvas.drawCircle(
-      Offset(cx, cy),
-      7,
-      Paint()..color = Colors.white,
-    );
-    canvas.drawCircle(
-      Offset(cx, cy),
-      4,
-      Paint()..color = AppColors.primary,
-    );
-
-    // Label min / max
-    final labelStyle = TextStyle(
-      color: Colors.white.withOpacity(0.8),
-      fontSize: 11,
-    );
-
-    _drawText(canvas, '60', Offset(cx - radius - 4, cy + 6), labelStyle);
-    _drawText(canvas, '180', Offset(cx + radius - 12, cy + 6), labelStyle);
   }
-
-  void _drawText(Canvas canvas, String text, Offset offset, TextStyle style) {
-    final tp = TextPainter(
-      text: TextSpan(text: text, style: style),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tp.paint(canvas, offset);
-  }
-
-  @override
-  bool shouldRepaint(_BPGaugePainter old) => old.progress != progress;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -587,9 +546,9 @@ class _HeartRateWidgetState extends State<HeartRateWidget>
                         color: Colors.white, size: 18),
                   ),
                   const SizedBox(width: 8),
-                  const Text(
-                    'Heart Rate',
-                    style: TextStyle(
+                  Text(
+                    SettingsScope.of(context).t('heart_rate'),
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -600,12 +559,14 @@ class _HeartRateWidgetState extends State<HeartRateWidget>
 
               const SizedBox(height: 14),
 
-              // ECG wave
-              SizedBox(
-                height: 60,
-                child: CustomPaint(
-                  painter: _EcgPainter(_anim.value),
-                  size: const Size(double.infinity, 60),
+              // ECG wave — clipped to stay inside the box
+              ClipRect(
+                child: SizedBox(
+                  height: 60,
+                  child: CustomPaint(
+                    painter: _EcgPainter(_anim.value),
+                    size: const Size(double.infinity, 60),
+                  ),
                 ),
               ),
 
@@ -639,7 +600,7 @@ class _HeartRateWidgetState extends State<HeartRateWidget>
               const SizedBox(height: 6),
 
               Text(
-                'Normal range',
+                SettingsScope.of(context).t('normal_range'),
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.7),
                   fontSize: 11,
@@ -687,8 +648,8 @@ class _EcgPainter extends CustomPainter {
         Offset(offsetX + 0.10 * w, mid - h * 0.12),
         Offset(offsetX + 0.12 * w, mid),
         Offset(offsetX + 0.15 * w, mid + h * 0.08),
-        Offset(offsetX + 0.20 * w, mid - h * 0.80), // R-peak (tall spike)
-        Offset(offsetX + 0.25 * w, mid + h * 0.30), // S-trough
+        Offset(offsetX + 0.20 * w, mid - h * 0.42), // R-peak (clamped to fit)
+        Offset(offsetX + 0.25 * w, mid + h * 0.22), // S-trough (clamped)
         Offset(offsetX + 0.30 * w, mid),
         Offset(offsetX + 0.45 * w, mid + h * 0.05),
         Offset(offsetX + 0.55 * w, mid - h * 0.10),
@@ -789,9 +750,9 @@ class _SpO2WidgetState extends State<SpO2Widget>
                     child: const Icon(Icons.air, color: Colors.white, size: 18),
                   ),
                   const SizedBox(width: 8),
-                  const Text(
-                    'SpO₂',
-                    style: TextStyle(
+                  Text(
+                    SettingsScope.of(context).t('spo2_label'),
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -826,7 +787,7 @@ class _SpO2WidgetState extends State<SpO2Widget>
               const SizedBox(height: 10),
 
               Text(
-                'Oxygen Level',
+                SettingsScope.of(context).t('oxygen_level'),
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.7),
                   fontSize: 11,
@@ -835,9 +796,9 @@ class _SpO2WidgetState extends State<SpO2Widget>
 
               const SizedBox(height: 2),
 
-              const Text(
-                'Excellent',
-                style: TextStyle(
+              Text(
+                SettingsScope.of(context).t('excellent'),
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,

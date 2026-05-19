@@ -63,6 +63,9 @@ def create_user (user:schemas.UserCreate, db:Session=Depends(get_db)):
             role = user.role,
             phone_number = user.phone_number,
             date_of_birth = user.date_of_birth,
+            age = user.age,
+            height = user.height,
+            weight = user.weight,
             doc_id = doc.id,
             emergency_id = emerg.id,
             is_registered = True 
@@ -102,6 +105,9 @@ def create_user (user:schemas.UserCreate, db:Session=Depends(get_db)):
                 "role": "doctor",
                 "phone_number": user.phone_number,
                 "date_of_birth": user.date_of_birth,
+                "age": user.age,
+                "height": user.height,
+                "weight": user.weight,
                 "is_registered": True
             }, synchronize_session=False)
             db.flush()
@@ -115,6 +121,9 @@ def create_user (user:schemas.UserCreate, db:Session=Depends(get_db)):
                 role="doctor",
                 phone_number=user.phone_number,
                 date_of_birth=user.date_of_birth,
+                age=user.age,
+                height=user.height,
+                weight=user.weight,
                 is_registered=True
             )
             db.add(new_user)

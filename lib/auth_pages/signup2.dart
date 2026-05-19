@@ -16,6 +16,9 @@ class SignUp2View extends StatefulWidget {
   final String phoneNumber;
   final String role;
   final String dateOfBirth;
+  final String age;
+  final String height;
+  final String weight;
 
   const SignUp2View({
     super.key,
@@ -25,6 +28,9 @@ class SignUp2View extends StatefulWidget {
     required this.phoneNumber,
     required this.role,
     required this.dateOfBirth,
+    required this.age,
+    required this.height,
+    required this.weight,
   });
 
   @override
@@ -64,6 +70,9 @@ class _SignUp2ViewState extends State<SignUp2View> {
         phoneNumber: widget.phoneNumber,
         role: widget.role,
         dateOfBirth: widget.dateOfBirth,
+        age: widget.age,
+        height: widget.height,
+        weight: widget.weight,
         doctorName: doctorNameController.text.trim(),
         doctorEmail: doctorEmailController.text.trim(),
         doctorPhone: doctorNumberController.text.trim(),

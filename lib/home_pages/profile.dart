@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:medical/functions/app_colors.dart';
 import 'package:medical/functions/custom_text.dart';
+import 'package:medical/functions/settings_provider.dart';
+import 'package:medical/home_pages/settings.dart';
 import 'package:medical/services/api_service.dart';
 import 'package:medical/models/doctor_model.dart';
 import 'package:medical/widgets/doctor_card.dart';
@@ -171,10 +173,16 @@ class _ProfileViewState extends State<ProfileView> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      // Set the background color for the whole screen
-      backgroundColor: Colors.white,
+    final s = SettingsScope.of(context);
+    final isDark = s.isDarkMode;
+    final bgColor = isDark ? const Color(0xFF0F1923) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subtextColor = isDark ? Colors.white60 : Colors.grey[600]!;
+    final emptyCardBg = isDark ? const Color(0xFF1A2A3A) : Colors.grey[100]!;
+    final emptyCardBorder = isDark ? Colors.white12 : Colors.grey[300]!;
 
+    return Scaffold(
+      backgroundColor: bgColor,
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SafeArea(
@@ -190,7 +198,7 @@ class _ProfileViewState extends State<ProfileView> {
                         width: 120,
                         height: 120,
                         decoration: BoxDecoration(
-                          color: Colors.grey[200],
+                          color: isDark ? const Color(0xFF1A2A3A) : Colors.grey[200],
                           shape: BoxShape.circle,
                           border: Border.all(
                             color: AppColors.primary,
@@ -207,7 +215,7 @@ class _ProfileViewState extends State<ProfileView> {
                             ? Icon(
                                 Icons.camera_alt,
                                 size: 40,
-                                color: Colors.grey[600],
+                                color: isDark ? Colors.white38 : Colors.grey[600],
                               )
                             : null,
                       ),
@@ -215,9 +223,8 @@ class _ProfileViewState extends State<ProfileView> {
 
                     const Gap(30),
 
-                    // Page Title
                     CustomText(
-                      text: 'My Profile',
+                      text: s.t('my_profile'),
                       color: AppColors.primary,
                       size: 35,
                       weight: FontWeight.bold,
@@ -225,51 +232,45 @@ class _ProfileViewState extends State<ProfileView> {
 
                     const Gap(40),
 
-                    // Profile Information Cards
-
-                    // Name Card
                     _buildInfoCard(
                       icon: Icons.person_outline,
-                      label: 'Name',
+                      label: s.t('profile_name'),
                       value: userName,
                     ),
 
                     const Gap(20),
 
-                    // Email Card
                     _buildInfoCard(
                       icon: Icons.email_outlined,
-                      label: 'Email',
+                      label: s.t('profile_email'),
                       value: userEmail,
                     ),
 
                     const Gap(20),
 
-                    // Age Card
                     _buildInfoCard(
                       icon: Icons.cake_outlined,
-                      label: 'Age',
-                      value: userAge > 0 ? '$userAge years' : 'Not set',
+                      label: s.t('profile_age'),
+                      value: userAge > 0
+                          ? '$userAge ${s.t('profile_age_years')}'
+                          : s.t('profile_age_not_set'),
                     ),
 
                     const Gap(20),
 
-                    // Phone Card
                     _buildInfoCard(
                       icon: Icons.phone_android_outlined,
-                      label: 'Phone',
+                      label: s.t('profile_phone'),
                       value: userPhone,
                     ),
 
                     const Gap(40),
 
-                    // Health Score Card
-                    _buildHealthScoreCard(),
+                    _buildHealthScoreCard(s),
 
                     const Gap(40),
 
-                    // Doctor Section
-                    _buildDoctorSection(),
+                    _buildDoctorSection(s, textColor, subtextColor, emptyCardBg, emptyCardBorder),
 
                     const Gap(40),
                   ],
@@ -333,7 +334,7 @@ class _ProfileViewState extends State<ProfileView> {
   }
 
   /// Builds the health score card with a progress indicator
-  Widget _buildHealthScoreCard() {
+  Widget _buildHealthScoreCard(SettingsProvider s) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -345,29 +346,25 @@ class _ProfileViewState extends State<ProfileView> {
         children: [
           Row(
             children: [
-              // Icon
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.favorite_outlined,
                   color: Colors.white,
                   size: 30,
                 ),
               ),
-
               const Gap(15),
-
-              // Label and Score
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const CustomText(
-                      text: 'Health Score',
+                    CustomText(
+                      text: s.t('health_score'),
                       color: Colors.white70,
                       size: 14,
                       weight: FontWeight.w500,
@@ -384,10 +381,7 @@ class _ProfileViewState extends State<ProfileView> {
               ),
             ],
           ),
-
           const Gap(15),
-
-          // Progress Bar
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: LinearProgressIndicator(
@@ -416,16 +410,16 @@ class _ProfileViewState extends State<ProfileView> {
   }
 
   /// Builds the doctor section widget
-  Widget _buildDoctorSection() {
+  Widget _buildDoctorSection(SettingsProvider s, Color textColor,
+      Color subtextColor, Color emptyCardBg, Color emptyCardBorder) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Section header
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             CustomText(
-              text: 'My Doctor',
+              text: s.t('my_doctor'),
               color: AppColors.primary,
               size: 20,
               weight: FontWeight.bold,
@@ -433,7 +427,7 @@ class _ProfileViewState extends State<ProfileView> {
             TextButton.icon(
               onPressed: _navigateToDoctorSelection,
               icon: const Icon(Icons.edit, size: 16),
-              label: const Text('Change', style: TextStyle(fontSize: 12)),
+              label: Text(s.t('change'), style: const TextStyle(fontSize: 12)),
               style: TextButton.styleFrom(
                 foregroundColor: AppColors.primary,
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -443,7 +437,6 @@ class _ProfileViewState extends State<ProfileView> {
         ),
         const SizedBox(height: 16),
 
-        // Doctor card or empty state
         _isLoadingDoctor
             ? const Center(
                 child: Padding(
@@ -460,30 +453,30 @@ class _ProfileViewState extends State<ProfileView> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
+                  color: emptyCardBg,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey[300]!),
+                  border: Border.all(color: emptyCardBorder),
                 ),
                 child: Column(
                   children: [
                     Icon(
                       Icons.person_add_outlined,
                       size: 48,
-                      color: Colors.grey[400],
+                      color: subtextColor.withOpacity(0.5),
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'No doctor assigned',
+                      s.t('no_doctor_assigned'),
                       style: TextStyle(
-                        color: Colors.grey[600],
+                        color: subtextColor,
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Tap to select your doctor',
-                      style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                      s.t('tap_select_doctor'),
+                      style: TextStyle(color: subtextColor.withOpacity(0.7), fontSize: 14),
                     ),
                   ],
                 ),

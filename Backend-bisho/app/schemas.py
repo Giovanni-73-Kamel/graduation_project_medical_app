@@ -23,6 +23,9 @@ class UserCreate(BaseModel):
     role : str
     phone_number : str
     date_of_birth : str
+    age:    str = ""
+    height: str = ""
+    weight: str = ""
     doctor_name: str = "None"
     doctor_email: str = "None"
     doctor_phone: str = "None"
@@ -40,6 +43,9 @@ class UserOut(BaseModel):
     role: str
     phone_number: str
     date_of_birth: str
+    age:    Optional[str] = None
+    height: Optional[str] = None
+    weight: Optional[str] = None
 
     class Config:
         from_attributes = True

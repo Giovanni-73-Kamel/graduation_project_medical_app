@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:medical/functions/app_colors.dart';
 import 'package:medical/functions/custom_text.dart';
 import 'package:medical/functions/txtfield.dart';
+import 'package:medical/functions/settings_provider.dart';
+import 'package:medical/home_pages/settings.dart';
 import 'package:medical/services/api_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -22,10 +24,6 @@ class _ContactsPageState extends State<ContactsPage> {
     _loadContacts();
   }
 
-  // ─────────────────────────────────────────────
-  // Load contacts from backend
-  // ─────────────────────────────────────────────
-
   Future<void> _loadContacts() async {
     setState(() => _isLoading = true);
     try {
@@ -37,9 +35,10 @@ class _ContactsPageState extends State<ContactsPage> {
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
+        final s = SettingsScope.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to load contacts: $e'),
+            content: Text('${s.t('failed_load_contacts')}: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -47,26 +46,25 @@ class _ContactsPageState extends State<ContactsPage> {
     }
   }
 
-  // ─────────────────────────────────────────────
-  // Add contact via backend
-  // ─────────────────────────────────────────────
-
   void _addContact() {
+    final s = SettingsScope.of(context);
+    final isDark = s.isDarkMode;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => AddContactSheet(
+        isDark: isDark,
         onAdd: (contact) async {
           try {
             await ApiService.createContact(contact.toJson());
             await _loadContacts();
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Contact added successfully'),
+                SnackBar(
+                  content: Text(s.t('contact_added')),
                   backgroundColor: Colors.green,
-                  duration: Duration(seconds: 2),
+                  duration: const Duration(seconds: 2),
                 ),
               );
             }
@@ -74,7 +72,7 @@ class _ContactsPageState extends State<ContactsPage> {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('Failed to add contact: $e'),
+                  content: Text('${s.t('failed_add_contact')}: $e'),
                   backgroundColor: Colors.red,
                 ),
               );
@@ -85,17 +83,15 @@ class _ContactsPageState extends State<ContactsPage> {
     );
   }
 
-  // ─────────────────────────────────────────────
-  // Edit contact via backend
-  // ─────────────────────────────────────────────
-
   void _editContact(int index) {
     final contact = contacts[index];
+    final s = SettingsScope.of(context);
+    final isDark = s.isDarkMode;
 
     if (contact.id == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cannot edit contact: missing ID'),
+        SnackBar(
+          content: Text(s.t('cannot_edit_missing_id')),
           backgroundColor: Colors.red,
         ),
       );
@@ -107,6 +103,7 @@ class _ContactsPageState extends State<ContactsPage> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => AddContactSheet(
+        isDark: isDark,
         existingContact: contact,
         onAdd: (updated) async {
           try {
@@ -114,10 +111,10 @@ class _ContactsPageState extends State<ContactsPage> {
             await _loadContacts();
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Contact updated successfully'),
+                SnackBar(
+                  content: Text(s.t('contact_updated')),
                   backgroundColor: Colors.green,
-                  duration: Duration(seconds: 2),
+                  duration: const Duration(seconds: 2),
                 ),
               );
             }
@@ -125,7 +122,7 @@ class _ContactsPageState extends State<ContactsPage> {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('Failed to update contact: $e'),
+                  content: Text('${s.t('failed_update_contact')}: $e'),
                   backgroundColor: Colors.red,
                 ),
               );
@@ -136,17 +133,14 @@ class _ContactsPageState extends State<ContactsPage> {
     );
   }
 
-  // ─────────────────────────────────────────────
-  // Delete contact via backend
-  // ─────────────────────────────────────────────
-
   void _deleteContact(int index) async {
     final contact = contacts[index];
+    final s = SettingsScope.of(context);
 
     if (contact.id == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cannot delete contact: missing ID'),
+        SnackBar(
+          content: Text(s.t('cannot_delete_missing_id')),
           backgroundColor: Colors.red,
         ),
       );
@@ -158,10 +152,10 @@ class _ContactsPageState extends State<ContactsPage> {
       setState(() => contacts.removeAt(index));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Contact deleted'),
+          SnackBar(
+            content: Text(s.t('contact_deleted')),
             backgroundColor: Colors.orange,
-            duration: Duration(seconds: 2),
+            duration: const Duration(seconds: 2),
           ),
         );
       }
@@ -169,7 +163,7 @@ class _ContactsPageState extends State<ContactsPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to delete contact: $e'),
+            content: Text('${s.t('failed_delete_contact')}: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -177,14 +171,17 @@ class _ContactsPageState extends State<ContactsPage> {
     }
   }
 
-  // ─────────────────────────────────────────────
-  // Build
-  // ─────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
+    final s = SettingsScope.of(context);
+    final isDark = s.isDarkMode;
+
+    final bgColor = isDark ? const Color(0xFF0F1923) : Colors.grey[100]!;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subtextColor = isDark ? Colors.white60 : Colors.grey[500]!;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: bgColor,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -195,9 +192,9 @@ class _ContactsPageState extends State<ContactsPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const CustomText(
-                    text: 'Contacts',
-                    color: Colors.black87,
+                  CustomText(
+                    text: s.t('contacts'),
+                    color: textColor,
                     size: 28,
                     weight: FontWeight.bold,
                   ),
@@ -209,7 +206,7 @@ class _ContactsPageState extends State<ContactsPage> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: CustomText(
-                      text: '${contacts.length} saved',
+                      text: '${contacts.length} ${s.t('saved')}',
                       color: AppColors.primary,
                       size: 14,
                       weight: FontWeight.w600,
@@ -224,7 +221,7 @@ class _ContactsPageState extends State<ContactsPage> {
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : contacts.isEmpty
-                      ? _buildEmptyState()
+                      ? _buildEmptyState(subtextColor)
                       : RefreshIndicator(
                           onRefresh: _loadContacts,
                           child: ListView.builder(
@@ -234,6 +231,7 @@ class _ContactsPageState extends State<ContactsPage> {
                             itemBuilder: (context, index) {
                               return ContactCard(
                                 contact: contacts[index],
+                                isDark: isDark,
                                 onEdit: () => _editContact(index),
                                 onDelete: () => _deleteContact(index),
                               );
@@ -252,7 +250,8 @@ class _ContactsPageState extends State<ContactsPage> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(Color subtextColor) {
+    final s = SettingsScope.of(context);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -260,19 +259,19 @@ class _ContactsPageState extends State<ContactsPage> {
           Icon(
             Icons.contact_phone_outlined,
             size: 80,
-            color: Colors.grey[300],
+            color: subtextColor.withOpacity(0.4),
           ),
           const SizedBox(height: 16),
           CustomText(
-            text: 'No contacts added',
-            color: Colors.grey[500]!,
+            text: s.t('no_contacts'),
+            color: subtextColor,
             size: 16,
             weight: FontWeight.normal,
           ),
           const SizedBox(height: 8),
           CustomText(
-            text: 'Tap the + button to add contacts',
-            color: Colors.grey[400]!,
+            text: s.t('tap_add_contacts'),
+            color: subtextColor.withOpacity(0.7),
             size: 14,
             weight: FontWeight.normal,
           ),
@@ -340,17 +339,19 @@ Future<void> _sendEmail(String email) async {
 }
 
 // ─────────────────────────────────────────────
-// ContactCard — now has onEdit callback
+// ContactCard — dark-mode aware
 // ─────────────────────────────────────────────
 
 class ContactCard extends StatelessWidget {
   final Contact contact;
+  final bool isDark;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const ContactCard({
     super.key,
     required this.contact,
+    required this.isDark,
     required this.onEdit,
     required this.onDelete,
   });
@@ -374,15 +375,19 @@ class ContactCard extends StatelessWidget {
         typeIcon = Icons.person;
     }
 
+    final cardBg = isDark ? const Color(0xFF1A2A3A) : Colors.white;
+    final nameColor = isDark ? Colors.white : Colors.black87;
+    final editIconColor = isDark ? Colors.white54 : Colors.grey[600]!;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardBg,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: typeColor.withOpacity(0.3)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -396,7 +401,7 @@ class ContactCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: typeColor.withOpacity(0.1),
+                color: typeColor.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(typeIcon, color: typeColor, size: 24),
@@ -410,7 +415,7 @@ class ContactCard extends StatelessWidget {
                 children: [
                   CustomText(
                     text: contact.name,
-                    color: Colors.black87,
+                    color: nameColor,
                     size: 16,
                     weight: FontWeight.bold,
                   ),
@@ -419,7 +424,7 @@ class ContactCard extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: typeColor.withOpacity(0.1),
+                      color: typeColor.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: CustomText(
@@ -450,7 +455,7 @@ class ContactCard extends StatelessWidget {
                   ),
                 IconButton(
                   onPressed: onEdit,
-                  icon: Icon(Icons.edit_outlined, color: Colors.grey[600]),
+                  icon: Icon(Icons.edit_outlined, color: editIconColor),
                   tooltip: 'Edit',
                 ),
                 IconButton(
@@ -468,16 +473,18 @@ class ContactCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────
-// AddContactSheet — handles both add and edit
+// AddContactSheet — dark-mode aware + translated
 // ─────────────────────────────────────────────
 
 class AddContactSheet extends StatefulWidget {
   final Function(Contact) onAdd;
   final Contact? existingContact;
+  final bool isDark;
 
   const AddContactSheet({
     super.key,
     required this.onAdd,
+    required this.isDark,
     this.existingContact,
   });
 
@@ -497,7 +504,6 @@ class _AddContactSheetState extends State<AddContactSheet> {
   @override
   void initState() {
     super.initState();
-    // Pre-fill fields when editing an existing contact
     if (widget.existingContact != null) {
       _nameController.text = widget.existingContact!.name;
       _phoneController.text = widget.existingContact!.phone;
@@ -518,11 +524,12 @@ class _AddContactSheetState extends State<AddContactSheet> {
 
   void _save() async {
     if (!_formKey.currentState!.validate()) return;
+    final s = SettingsScope.of(context);
 
     if (_phoneController.text.trim().isEmpty &&
         _emailController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter phone or email')),
+        SnackBar(content: Text(s.t('enter_phone_or_email'))),
       );
       return;
     }
@@ -544,13 +551,20 @@ class _AddContactSheetState extends State<AddContactSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final s = SettingsScope.of(context);
+    final isDark = widget.isDark;
+    final sheetBg = isDark ? const Color(0xFF1A2A3A) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final borderColor =
+        isDark ? Colors.white24 : Colors.grey.shade300;
+
     return Container(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      decoration: BoxDecoration(
+        color: sheetBg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -565,34 +579,36 @@ class _AddContactSheetState extends State<AddContactSheet> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   CustomText(
-                    text: _isEditing ? 'Edit Contact' : 'Add Contact',
-                    color: Colors.black87,
+                    text: _isEditing
+                        ? s.t('edit_contact')
+                        : s.t('add_contact'),
+                    color: textColor,
                     size: 22,
                     weight: FontWeight.bold,
                   ),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close),
+                    icon: Icon(Icons.close, color: textColor),
                   ),
                 ],
               ),
               const SizedBox(height: 20),
 
               // Type selection
-              const CustomText(
-                text: 'Relationship',
-                color: Colors.black87,
+              CustomText(
+                text: s.t('relationship'),
+                color: textColor,
                 size: 14,
                 weight: FontWeight.w600,
               ),
               const SizedBox(height: 8),
               Row(
                 children: [
-                  _buildTypeChip('Relative', Colors.blue),
+                  _buildTypeChip('Relative', s.t('relative'), Colors.blue, isDark),
                   const SizedBox(width: 8),
-                  _buildTypeChip('Doctor', Colors.green),
+                  _buildTypeChip('Doctor', s.t('doctor'), Colors.green, isDark),
                   const SizedBox(width: 8),
-                  _buildTypeChip('Other', Colors.orange),
+                  _buildTypeChip('Other', s.t('other'), Colors.orange, isDark),
                 ],
               ),
               const SizedBox(height: 20),
@@ -600,12 +616,12 @@ class _AddContactSheetState extends State<AddContactSheet> {
               // Name
               Container(
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade300),
+                  border: Border.all(color: borderColor),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: CustomTxtfield(
                   controller: _nameController,
-                  hint: 'Name',
+                  hint: s.t('name'),
                   isPassword: false,
                 ),
               ),
@@ -614,12 +630,12 @@ class _AddContactSheetState extends State<AddContactSheet> {
               // Phone
               Container(
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade300),
+                  border: Border.all(color: borderColor),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: CustomTxtfield(
                   controller: _phoneController,
-                  hint: 'Phone Number',
+                  hint: s.t('phone_number'),
                   isPassword: false,
                   keyboardType: TextInputType.number,
                 ),
@@ -629,12 +645,12 @@ class _AddContactSheetState extends State<AddContactSheet> {
               // Email
               Container(
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade300),
+                  border: Border.all(color: borderColor),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: CustomTxtfield(
                   controller: _emailController,
-                  hint: 'Email Address',
+                  hint: s.t('email_address'),
                   isPassword: false,
                   keyboardType: TextInputType.emailAddress,
                 ),
@@ -664,7 +680,9 @@ class _AddContactSheetState extends State<AddContactSheet> {
                           ),
                         )
                       : Text(
-                          _isEditing ? 'Update Contact' : 'Save Contact',
+                          _isEditing
+                              ? s.t('update_contact')
+                              : s.t('save_contact'),
                           style: const TextStyle(
                               fontSize: 16, fontWeight: FontWeight.bold),
                         ),
@@ -677,25 +695,31 @@ class _AddContactSheetState extends State<AddContactSheet> {
     );
   }
 
-  Widget _buildTypeChip(String type, Color color) {
+  Widget _buildTypeChip(
+      String type, String label, Color color, bool isDark) {
     final isSelected = _selectedType == type;
+    final unselectedBg = isDark ? const Color(0xFF0F1923) : Colors.white;
+    final unselectedText = isDark ? Colors.white60 : Colors.grey[700]!;
+    final unselectedBorder =
+        isDark ? Colors.white24 : Colors.grey[300]!;
+
     return Expanded(
       child: InkWell(
         onTap: () => setState(() => _selectedType = type),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: isSelected ? color : Colors.white,
+            color: isSelected ? color : unselectedBg,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: isSelected ? color : Colors.grey[300]!,
+              color: isSelected ? color : unselectedBorder,
             ),
           ),
           child: Center(
             child: Text(
-              type,
+              label,
               style: TextStyle(
-                color: isSelected ? Colors.white : Colors.grey[700],
+                color: isSelected ? Colors.white : unselectedText,
                 fontWeight: FontWeight.w600,
               ),
             ),
