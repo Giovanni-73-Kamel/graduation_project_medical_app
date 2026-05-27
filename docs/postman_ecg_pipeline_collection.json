@@ -1,0 +1,80 @@
+{
+  "info": {
+    "name": "Medical App ECG/PPG Pipeline",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000"
+    },
+    {
+      "key": "session_id",
+      "value": "session_123"
+    },
+    {
+      "key": "device_token",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Create Session",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-Device-Token", "value": "{{device_token}}" }
+        ],
+        "url": "{{base_url}}/api/sessions",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"device_id\":\"device_001\",\"session_id\":\"{{session_id}}\",\"sampling_rate\":250,\"status\":\"active\"}"
+        }
+      }
+    },
+    {
+      "name": "Upload Reading",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-Device-Token", "value": "{{device_token}}" }
+        ],
+        "url": "{{base_url}}/api/readings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"device_id\":\"device_001\",\"session_id\":\"{{session_id}}\",\"timestamp\":\"2026-05-13T10:30:00Z\",\"sampling_rate\":250,\"ecg\":[0.12,0.15,0.18],\"ppg\":[520,525,531],\"battery\":90,\"status\":\"active\"}"
+        }
+      }
+    },
+    {
+      "name": "Analyze Session",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/api/analyze/{{session_id}}"
+      }
+    },
+    {
+      "name": "List Sessions",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/api/sessions"
+      }
+    },
+    {
+      "name": "Get Session Readings",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/api/sessions/{{session_id}}/readings"
+      }
+    },
+    {
+      "name": "Get Session Analysis",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/api/sessions/{{session_id}}/analysis"
+      }
+    }
+  ]
+}

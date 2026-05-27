@@ -1,0 +1,23 @@
+{
+    "input_shape": [
+        186,
+        1
+    ],
+    "num_classes": 5,
+    "class_names": [
+        "Normal",
+        "Supraventricular",
+        "Ventricular",
+        "Fusion",
+        "Unknown"
+    ],
+    "optimal_thresholds": {
+        "Normal": 0.05,
+        "Supraventricular": 0.9,
+        "Ventricular": 0.6,
+        "Fusion": 0.9,
+        "Unknown": 0.7
+    },
+    "normalization": "StandardScaler",
+    "model_version": "1.0_confidence"
+}

@@ -1,0 +1,10 @@
+{
+  "device_id": "device_001",
+  "session_id": "session_123",
+  "timestamp": "2026-05-13T10:30:00Z",
+  "sampling_rate": 250,
+  "ecg": [0.12, 0.15, 0.18],
+  "ppg": [520, 525, 531],
+  "battery": 90,
+  "status": "active"
+}

@@ -43,3 +43,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local hardware secrets
+hardware/config.h
+
+# Local backend environment
+Backend-bisho/.env

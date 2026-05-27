@@ -1,11 +1,11 @@
 import 'dart:convert';
+import 'package:medical/config/app_config.dart';
+import 'package:medical/models/ecg_pipeline_models.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  // static const String baseUrl =
-  //     'http://10.0.0.190:8000'; // Your computer's WiFi IP
-  static const String baseUrl = 'http://10.0.2.2:8000'; // bta3 l emulator
+  static String get baseUrl => AppConfig.backendBaseUrl;
   // ─────────────────────────────────────────────
   // Token helpers
   // ─────────────────────────────────────────────
@@ -795,6 +795,89 @@ class ApiService {
   // ECG / Heart Condition API  →  /ecg/
   // ─────────────────────────────────────────────
 
+  // ECG / PPG session pipeline API
+
+  static Future<List<MonitoringSession>> getSessions({
+    String? deviceId,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/sessions').replace(
+      queryParameters: deviceId == null ? null : {'device_id': deviceId},
+    );
+    final response = await http.get(uri);
+    if (response.statusCode == 200) {
+      return (json.decode(response.body) as List<dynamic>)
+          .map((item) =>
+              MonitoringSession.fromJson(item as Map<String, dynamic>))
+          .toList();
+    }
+    throw Exception(_messageFromResponse(response, 'Failed to load sessions'));
+  }
+
+  static Future<MonitoringSession> getSession(String sessionId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/sessions/$sessionId'),
+    );
+    if (response.statusCode == 200) {
+      return MonitoringSession.fromJson(
+        json.decode(response.body) as Map<String, dynamic>,
+      );
+    }
+    throw Exception(_messageFromResponse(response, 'Failed to load session'));
+  }
+
+  static Future<List<RawReading>> getSessionReadings(
+    String sessionId, {
+    int limit = 500,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/sessions/$sessionId/readings').replace(
+      queryParameters: {'limit': '$limit'},
+    );
+    final response = await http.get(uri);
+    if (response.statusCode == 200) {
+      return (json.decode(response.body) as List<dynamic>)
+          .map((item) => RawReading.fromJson(item as Map<String, dynamic>))
+          .toList();
+    }
+    throw Exception(_messageFromResponse(response, 'Failed to load readings'));
+  }
+
+  static Future<List<AnalysisResult>> getSessionAnalysis(
+    String sessionId,
+  ) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/sessions/$sessionId/analysis'),
+    );
+    if (response.statusCode == 200) {
+      return (json.decode(response.body) as List<dynamic>)
+          .map((item) => AnalysisResult.fromJson(item as Map<String, dynamic>))
+          .toList();
+    }
+    throw Exception(_messageFromResponse(response, 'Failed to load analysis'));
+  }
+
+  static Future<AnalysisResult> analyzeSession(String sessionId) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/analyze/$sessionId'),
+    );
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return AnalysisResult.fromJson(
+        json.decode(response.body) as Map<String, dynamic>,
+      );
+    }
+    throw Exception(_messageFromResponse(response, 'Failed to analyze session'));
+  }
+
+  static String _messageFromResponse(http.Response response, String fallback) {
+    try {
+      final data = json.decode(response.body);
+      final detail = data is Map<String, dynamic> ? data['detail'] : null;
+      if (detail != null) return detail.toString();
+    } catch (_) {
+      // Use fallback below.
+    }
+    return '$fallback (${response.statusCode})';
+  }
+
   /// GET /ecg/classifications
   ///
   /// Returns the list of ECG record-level classification definitions
@@ -806,7 +889,7 @@ class ApiService {
     try {
       final token = await getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/ecg/classifications'),
+        Uri.parse('$baseUrl/api/ecg/classifications'),
         headers: {'Authorization': 'Bearer $token'},
       );
       if (response.statusCode == 200) {
@@ -829,7 +912,7 @@ class ApiService {
     try {
       final token = await getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/ecg/classification-levels'),
+        Uri.parse('$baseUrl/api/ecg/classification-levels'),
         headers: {'Authorization': 'Bearer $token'},
       );
       if (response.statusCode == 200) {
@@ -848,7 +931,7 @@ class ApiService {
     try {
       final token = await getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/ecg/current-condition'),
+        Uri.parse('$baseUrl/api/ecg/current-condition'),
         headers: {'Authorization': 'Bearer $token'},
       );
       if (response.statusCode == 200) {

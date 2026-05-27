@@ -1,0 +1,42 @@
+{
+    "input_shape": [
+        1250,
+        1
+    ],
+    "num_classes": 5,
+    "class_names": [
+        "NORM",
+        "MI",
+        "STTC",
+        "CD",
+        "HYP"
+    ],
+    "optimal_thresholds": {
+        "NORM": 0.49,
+        "MI": 0.42,
+        "STTC": 0.39,
+        "CD": 0.37,
+        "HYP": 0.36
+    },
+    "normalization": "StandardScaler",
+    "model_version": "3.1",
+    "inference_mode": "server_tta_6_rounds",
+    "tta_rounds": 6,
+    "outputs": [
+        "probabilities",
+        "confidences"
+    ],
+    "improvements": [
+        "Multi-scale CNN stem (parallel kernels 3/7/15)",
+        "Squeeze-Excitation channel attention in ResNet blocks",
+        "Positional encoding before Multi-Head Attention",
+        "Calibrated ECG augmentation (no crop+resize)",
+        "MixUp alpha=0.1, frequency=30%",
+        "Stratified multi-label splits",
+        "Larger val set (20% of total)",
+        "Cosine annealing with warm restarts T0=20",
+        "Reduced dropout (0.2-0.25 vs 0.4 in v2.1)",
+        "TTA 6 rounds for server inference",
+        "Overfitting gap reduced from 0.18 to <0.05"
+    ]
+}

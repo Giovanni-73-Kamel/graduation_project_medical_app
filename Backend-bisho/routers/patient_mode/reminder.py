@@ -28,12 +28,14 @@ def update_reminder(
     reminder = reminder_query.first()
     if reminder == None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    if reminder.owner_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not authorized to update this reminder")
     
     reminder_query.update(updated_reminder.dict(),synchronize_session=False)
 
     db.commit()
        
-    return updated_reminder
+    return reminder_query.first()
 
 
 @router.get("/",response_model=List[schemas.ReminderOut])
@@ -50,7 +52,7 @@ def delete_reminder(id:int, db:Session= Depends(database.get_db),current_user:in
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
     if (reminder.owner_id != current_user.id):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not authorized to delete this reminder")
     
     reminder_query.delete(synchronize_session=False)
     db.commit()

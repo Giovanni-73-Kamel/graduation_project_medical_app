@@ -11,13 +11,11 @@ def get_posts(db: Session = Depends(get_db),current_user:int = Depends(oauth2.ge
 
     #cursor.execute("""SELECT * FROM posts""")
     #posts =cursor.fetchall()
-    print(current_user.email)
     posts = db.query(models.Post).filter(models.Post.title.contains(search)).limit(limit).offset(skip).all()
     return posts
 
 @router.post("/createposts" , status_code=status.HTTP_201_CREATED,response_model=schemas.Post)
 def create_posts(post : schemas.PostCreate, db:Session = Depends(get_db), current_user:int= Depends(oauth2.get_current_user)):
-    print (current_user)
     # #place holders are helded instead of f string to avoid SQL injection
     # cursor.execute("""INSERT INTO posts (title, content, published) VALUES (%s, %s, %s) RETURNING * """,(post.title,post.content,post.published))
     # # the order of the inputs have a critical impact in output:different order other than in DB causes errors

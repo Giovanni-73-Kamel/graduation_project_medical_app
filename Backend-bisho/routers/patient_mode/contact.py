@@ -32,12 +32,14 @@ def update_contact(
     contact = contact_query.first()
     if contact == None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    if contact.owner_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not authorized to update this contact")
     
     contact_query.update(updated_contact.dict(),synchronize_session=False)
 
     db.commit()
        
-    return updated_contact
+    return contact_query.first()
 
 
 @router.delete("/{id}",status_code=status.HTTP_204_NO_CONTENT)
@@ -49,7 +51,7 @@ def delete_contact(id:int, db:Session= Depends(database.get_db),current_user:int
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
     if (contact.owner_id != current_user.id):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not authorized to delete this contact")
     
     contact_query.delete(synchronize_session=False)
     db.commit()
