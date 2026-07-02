@@ -1,0 +1,1082 @@
+\chapter{Integration Between AI Models, Backend, and Hardware}
+
+\section{Scope of This Chapter}
+
+This chapter explains the integration work that connects the physical monitoring hardware, the FastAPI backend, and the local AI models used by the medical monitoring system. It does not repeat the complete mobile application, authentication screens, appointment features, or general database design. Its focus is the end-to-end technical path that begins when the hardware captures ECG and PPG samples, continues through backend ingestion and storage, and ends when the AI pipeline produces metrics, predictions, alerts, and device commands.
+
+The integration layer is important because the project is not only a user interface and not only a trained model. It is a complete data path where noisy real-world sensor readings must be transformed into validated backend records and then into structured decision-support output. The hardware must sample at a stable rate and report its state. The backend must accept batches safely, protect the ingestion route when configured, preserve enough raw data for analysis, and prevent bad signal states from contaminating the AI models. The AI layer must load local model artifacts, reshape signals into each model's expected input, recover gracefully when a model is unavailable, and return medically cautious results.
+
+The implemented integration covers three main model families:
+
+\begin{itemize}
+    \item A record-level ECG arrhythmia classifier in \texttt{AI models/ecg\_classifier\_v31\_deployment/}.
+    \item A beat-level ECG morphology classifier in \texttt{AI models/Morphological Heartbeat Arrhythmia Classifier/}.
+    \item A PPG and metadata based blood-pressure estimator in \texttt{AI models/BP\_Model\_Vital\_15\_Meta/}.
+\end{itemize}
+
+These models are connected to the backend through \texttt{Backend-bisho/app/services/ai\_inference.py}. The hardware sends readings to the backend through the route implemented in \texttt{Backend-bisho/routers/ecg\_pipeline.py}. The firmware that performs sampling and upload is located at \texttt{hardware/ECG\_PPG\_HR\_SPO2/ECG\_PPG\_HR\_SPO2.ino}. Together, these files form the practical integration boundary between sensors, network transport, API validation, database persistence, signal processing, AI inference, and feedback.
+
+\section{Repository Paths Used by the Integration}
+
+The table below lists the main paths that were checked for this integration chapter and describes the role of each path in the hardware-backend-AI pipeline.
+
+\begin{longtable}{p{0.34\textwidth}p{0.60\textwidth}}
+\caption{Integration paths checked in the repository}\\
+\toprule
+\textbf{Path} & \textbf{Integration Responsibility}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Path} & \textbf{Integration Responsibility}\\
+\midrule
+\endhead
+\texttt{hardware/ECG\_PPG\_HR\_SPO2/ECG\_PPG\_HR\_SPO2.ino} & ESP32 firmware for Wi-Fi connection, ECG analog sampling, MAX30105 red/IR PPG reading, batch creation, JSON payload construction, HTTP upload, and backend command handling.\\
+\texttt{hardware/config.example.h} & Example hardware configuration for Wi-Fi credentials, backend reading URL, device identity, optional device API key, I2C pins, ECG pins, finger detection thresholds, and battery configuration.\\
+\texttt{Backend-bisho/routers/ecg\_pipeline.py} & FastAPI router for device registration, session creation, reading ingestion, manual analysis execution, analysis retrieval, alerts, device assignment, AI model metadata, and backend-to-device commands.\\
+\texttt{Backend-bisho/app/schemas.py} & Pydantic request and response schemas for devices, sessions, readings, analysis results, and clinical alerts. This layer validates signal arrays, sample rates, timestamps, battery values, and matching ECG/PPG lengths.\\
+\texttt{Backend-bisho/app/models.py} & SQLAlchemy models for devices, monitoring sessions, raw readings, analysis results, and clinical alerts. These tables persist the integration state.\\
+\texttt{Backend-bisho/app/services/reading\_storage.py} & Storage preparation policy for raw readings. It can compact invalid ECG/PPG channels, keep metadata summaries, cap long signal arrays, and correct some hardware contact states using backend-side checks.\\
+\texttt{Backend-bisho/app/services/signal\_processing.py} & Classical signal processing utilities for flattening, detrending, peak detection, heart rate, HRV, perfusion index, signal quality, and non-AI alerts.\\
+\texttt{Backend-bisho/app/services/ai\_inference.py} & AI integration service. It loads model modules dynamically, resolves model directories, builds model-specific tensors, handles model availability, normalizes predictions, creates summaries, and merges AI alerts with signal-processing alerts.\\
+\texttt{Backend-bisho/app/services/analysis\_worker.py} & Optional background analysis worker. It queues eligible sessions and runs the same AI inference pipeline outside the request path when auto-analysis is enabled.\\
+\texttt{Backend-bisho/app/config.py} & Central settings for model directories, model enablement, timeout and retry behavior, device ingest token, auto-analysis, raw sample caps, and invalid-signal compaction.\\
+\texttt{AI models/ecg\_classifier\_v31\_deployment/} & Deployment package for the record-level ECG classifier, including Keras model, scaler, configuration, and Python wrapper.\\
+\texttt{AI models/Morphological Heartbeat Arrhythmia Classifier/} & Deployment package for the beat-level morphology classifier, including Keras model, scaler, configuration, and Python wrapper.\\
+\texttt{AI models/BP\_Model\_Vital\_15\_Meta/} & Deployment package for the blood-pressure model and its preprocessing/scaling artifacts.\\
+\texttt{docs/sample\_reading\_payload.json} & Small example of the reading payload shape expected by the backend.\\
+\texttt{Backend-bisho/tests/test\_ai\_integration.py} & Backend tests for the AI integration behavior.\\
+\texttt{Backend-bisho/tests/test\_ecg\_pipeline\_api.py} & Backend tests for the ECG/PPG API pipeline behavior.\\
+\bottomrule
+\end{longtable}
+
+\section{High-Level Integration Architecture}
+
+The system is integrated as a layered pipeline. Each layer has a clear responsibility and passes a structured output to the next layer. The hardware layer is responsible for sensor acquisition and transport. The API layer validates and stores data. The storage layer keeps raw readings and metadata in a form that remains useful for later analysis. The processing and AI layer converts signal arrays into metrics, model predictions, summaries, and clinical alerts. The feedback layer returns commands to the hardware and exposes analysis results to backend clients.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=1.35cm,
+    block/.style={rectangle, rounded corners, draw, align=center, minimum width=3.7cm, minimum height=0.9cm},
+    data/.style={trapezium, trapezium left angle=70, trapezium right angle=110, draw, align=center, minimum width=3.7cm, minimum height=0.9cm},
+    arrow/.style={-{Latex}, thick}
+]
+\node[block] (sensors) {ECG sensor\\MAX30105 PPG sensor};
+\node[block, below=of sensors] (firmware) {ESP32 firmware\\sampling and batching};
+\node[data, below=of firmware] (payload) {JSON reading payload\\ECG, PPG, metadata};
+\node[block, below=of payload] (api) {FastAPI ECG pipeline\\validation and ingestion};
+\node[block, below=of api] (storage) {Database records\\device, session, readings};
+\node[block, below=of storage] (analysis) {Signal processing\\AI inference service};
+\node[data, below=of analysis] (result) {Metrics, predictions\\alerts, commands};
+\draw[arrow] (sensors) -- (firmware);
+\draw[arrow] (firmware) -- (payload);
+\draw[arrow] (payload) -- (api);
+\draw[arrow] (api) -- (storage);
+\draw[arrow] (storage) -- (analysis);
+\draw[arrow] (analysis) -- (result);
+\end{tikzpicture}
+\caption{Overall integration pipeline from sensors to AI output}
+\end{figure}
+
+The design avoids coupling the AI models directly to the hardware. The ESP32 does not know about Keras models, model input sizes, TensorFlow, or medical classifications. It only sends measured data and receives simple command messages. Similarly, the AI code does not handle Wi-Fi, I2C, ADC pins, or HTTP retry timing. The backend acts as the integration boundary and translates between embedded device constraints and AI model constraints.
+
+\section{Hardware Acquisition Layer}
+
+The hardware path begins in the ESP32 firmware. The firmware includes Wi-Fi networking, HTTP client support, I2C communication, timestamp synchronization, and the MAX30105 sensor library. The main sampling constants are defined directly in the firmware:
+
+\begin{itemize}
+    \item \texttt{SAMPLING\_RATE\_HZ = 250}
+    \item \texttt{BATCH\_SIZE = 125}
+    \item \texttt{SAMPLE\_INTERVAL\_US = 1000000 / SAMPLING\_RATE\_HZ}
+    \item Default ECG pin: \texttt{34}
+    \item Default lead-off pins: \texttt{32} and \texttt{33}
+    \item Default I2C pins: \texttt{SDA = 21}, \texttt{SCL = 22}
+\end{itemize}
+
+At 250 Hz with a batch size of 125 samples, each uploaded batch represents approximately half a second of signal. This is short enough to keep latency low and long enough to reduce request overhead compared with uploading one sample at a time.
+
+The firmware reads two physiological streams:
+
+\begin{itemize}
+    \item ECG voltage from the analog ECG input, unless the lead-off pins show disconnected electrodes.
+    \item PPG red/IR values from the MAX30105 sensor over I2C, with checks for fresh samples, finger contact, IR mean, IR AC RMS, and estimated SpO2.
+\end{itemize}
+
+The firmware does not simply send raw values. It also sends context metadata. This metadata is essential because the backend and AI layer need to know whether the signal is trustworthy. Important metadata fields include firmware version, PPG readiness, reinitialization count, finger detection, finger confidence, IR mean, IR AC RMS, IR amplitude, fresh PPG sample count, ECG lead state, finger detection mode, thresholds used by the device, and optional SpO2 estimate.
+
+\subsection{Hardware Batch Lifecycle}
+
+The firmware keeps an active batch and a pending batch. The active batch collects current samples. When it reaches 125 samples, the firmware finalizes signal quality indicators, moves it into the pending slot, and resets the active batch. The pending batch is then uploaded when Wi-Fi is connected and the upload retry timer allows it. If a pending batch already exists, the firmware drops the new completed batch and increments \texttt{droppedBatches}; this prevents memory growth on the microcontroller when the network is down.
+
+\begin{lstlisting}[caption={Pseudocode for hardware sampling and batch upload}]
+initialize WiFi, I2C, ECG pins, MAX30105 sensor
+session_id = configured session id or generated device-based id
+
+loop forever:
+    connect WiFi if disconnected and retry timer expired
+
+    if sample interval elapsed:
+        read ECG lead-off pins
+        read ECG analog value if leads are attached
+        read MAX30105 IR and red values if PPG sensor is ready
+        update finger-contact and SpO2 statistics
+        append ECG and PPG values to active batch
+
+        if active batch reaches BATCH_SIZE:
+            finalize vitals and contact metadata
+            if no pending upload exists:
+                move active batch to pending batch
+            else:
+                increment dropped batch counter
+            reset active batch
+
+    if pending batch exists and retry timer expired:
+        build JSON payload
+        POST payload to BACKEND_READINGS_URL
+        if HTTP response is successful:
+            parse command hints from backend response
+            clear pending batch
+        else:
+            schedule upload retry
+\end{lstlisting}
+
+\section{Hardware Payload Contract}
+
+The payload built by \texttt{buildPayload()} in the firmware follows the backend \texttt{ReadingCreate} schema. Each reading includes device identity, session identity, timestamp, sampling rate, ECG array, PPG array, battery value, status, and metadata.
+
+\begin{lstlisting}[caption={Conceptual reading payload sent by the hardware}]
+{
+  "device_id": "device_001",
+  "session_id": "session_001",
+  "timestamp": "2026-05-13T10:30:00.000Z",
+  "sampling_rate": 250,
+  "ecg": [0.1023, 0.1031, 0.1040],
+  "ppg": [51234, 51320, 51401],
+  "battery": 90,
+  "status": "active",
+  "metadata": {
+    "firmware_version": "ecg-ppg-1.0",
+    "ppg_sensor_ready": true,
+    "finger_detected": true,
+    "finger_confidence": 0.82,
+    "ir_mean": 52000.0,
+    "ir_ac_rms": 145.2,
+    "ir_amplitude": 380,
+    "ecg_leads_attached": true,
+    "spo2_valid": true,
+    "spo2_percent": 97.4
+  }
+}
+\end{lstlisting}
+
+The status field is produced by the firmware using hardware conditions:
+
+\begin{itemize}
+    \item \texttt{ppg\_sensor\_off}: the MAX30105 sensor is not ready.
+    \item \texttt{no\_finger}: the PPG sensor is online but finger detection failed.
+    \item \texttt{leads\_off}: ECG electrodes appear disconnected.
+    \item \texttt{active}: both ECG and PPG conditions are acceptable enough to store as active readings.
+\end{itemize}
+
+This explicit status value is important because it lets the backend make storage decisions without guessing only from numeric arrays. For example, a PPG array may contain zeros or stale values when the sensor is disconnected. The backend can use the status and metadata to drop or compact that channel instead of feeding unusable data to the AI pipeline.
+
+\section{Backend Ingestion Layer}
+
+The ingestion endpoint is implemented in \texttt{Backend-bisho/routers/ecg\_pipeline.py} as \texttt{POST /api/readings}. The route performs several integration tasks:
+
+\begin{itemize}
+    \item Optionally checks \texttt{X-Device-Token} against \texttt{settings.device\_ingest\_token}.
+    \item Creates or updates the device record.
+    \item Creates the monitoring session if it does not already exist.
+    \item Detects duplicate readings using \texttt{session\_id} and \texttt{timestamp}.
+    \item Runs storage preparation for ECG and PPG arrays.
+    \item Inserts a \texttt{RawReading} database row.
+    \item Optionally queues analysis if auto-analysis is enabled and enough ECG samples are available.
+    \item Returns the stored reading plus command hints for the device.
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=1.15cm,
+    block/.style={rectangle, rounded corners, draw, align=center, minimum width=4.4cm, minimum height=0.8cm},
+    decision/.style={diamond, aspect=2.2, draw, align=center, inner sep=1pt},
+    arrow/.style={-{Latex}, thick}
+]
+\node[block] (start) {POST /api/readings};
+\node[decision, below=of start] (token) {Device token\\required?};
+\node[block, below=of token] (session) {Get or create\\device and session};
+\node[decision, below=of session] (dup) {Duplicate\\timestamp?};
+\node[block, below left=1.0cm and 1.4cm of dup] (existing) {Return existing\\reading};
+\node[block, below right=1.0cm and 1.4cm of dup] (prepare) {Prepare storage\\compact invalid channels};
+\node[block, below=of prepare] (save) {Save RawReading\\commit transaction};
+\node[block, below=of save] (analyze) {Maybe queue\\auto-analysis};
+\node[block, below=of analyze] (commands) {Build device\\commands};
+\node[block, below=of commands] (response) {Return ReadingOut};
+\draw[arrow] (start) -- (token);
+\draw[arrow] (token) -- (session);
+\draw[arrow] (session) -- (dup);
+\draw[arrow] (dup) -- node[left]{yes} (existing);
+\draw[arrow] (dup) -- node[right]{no} (prepare);
+\draw[arrow] (prepare) -- (save);
+\draw[arrow] (save) -- (analyze);
+\draw[arrow] (analyze) -- (commands);
+\draw[arrow] (commands) -- (response);
+\draw[arrow] (existing) |- (response);
+\end{tikzpicture}
+\caption{Backend reading ingestion flow}
+\end{figure}
+
+The ingestion path is deliberately idempotent for repeated uploads. If a hardware device retries an upload after an uncertain network failure, the backend can detect that a reading with the same session and timestamp already exists and return the existing record instead of creating duplicate rows. This is necessary because embedded devices often retry after timeouts without knowing whether the previous request was committed.
+
+\subsection{API Endpoints Used by the Integration}
+
+The integration is exposed through a focused group of API endpoints under the \texttt{/api} prefix. These endpoints are not all used by the same caller. Some are intended for the ESP32 firmware, while others are intended for backend clients such as the mobile application, a doctor dashboard, or a test tool such as Postman.
+
+\begin{longtable}{p{0.24\textwidth}p{0.25\textwidth}p{0.43\textwidth}}
+\caption{Backend endpoints involved in AI and hardware integration}\\
+\toprule
+\textbf{Endpoint} & \textbf{Primary Caller} & \textbf{Purpose}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Endpoint} & \textbf{Primary Caller} & \textbf{Purpose}\\
+\midrule
+\endhead
+\texttt{POST /api/devices/register} & Hardware setup tool or backend client & Registers or updates a device, including label, firmware version, patient assignment, and metadata.\\
+\texttt{GET /api/devices} & Backend client & Lists known devices, optionally filtered by patient.\\
+\texttt{PATCH /api/devices/\{device\_id\}/assign} & Authenticated doctor, patient, or admin & Assigns or unassigns a device to a patient with role-aware authorization.\\
+\texttt{POST /api/sessions} & Hardware or backend client & Creates or updates a monitoring session for a device.\\
+\texttt{GET /api/sessions} & Backend client & Lists recent monitoring sessions, optionally filtered by device.\\
+\texttt{POST /api/readings} & ESP32 firmware & Receives ECG/PPG batches, stores raw readings, and returns device commands.\\
+\texttt{GET /api/sessions/\{session\_id\}/readings} & Backend client & Returns stored readings for charting, debugging, or later analysis.\\
+\texttt{POST /api/analyze/\{session\_id\}} & Backend client or test workflow & Runs manual signal processing and AI inference for a session.\\
+\texttt{GET /api/sessions/\{session\_id\}/analysis} & Backend client & Returns saved analysis results for a session.\\
+\texttt{GET /api/alerts} & Doctor, patient, or admin client & Lists clinical alerts with role-aware filtering.\\
+\texttt{PATCH /api/alerts/\{alert\_id\}/resolve} & Doctor or admin client & Marks a clinical alert as resolved.\\
+\texttt{GET /api/ai/models} & Backend client or diagnostics screen & Returns metadata and load status for the integrated AI models.\\
+\texttt{GET /api/analysis-worker/status} & Developer or admin diagnostics & Reports whether the background analysis worker is running and how many jobs were processed or failed.\\
+\bottomrule
+\end{longtable}
+
+This endpoint layout separates data capture from analysis retrieval. The hardware needs only the reading upload URL during normal operation. Backend clients can inspect sessions, run analysis manually, and fetch saved results without changing the firmware. This is useful because firmware changes are slower to deploy than backend or UI changes.
+
+\subsection{Backend Validation}
+
+The \texttt{ReadingCreate} schema in \texttt{Backend-bisho/app/schemas.py} validates the incoming reading before it reaches storage. It requires:
+
+\begin{itemize}
+    \item Non-empty \texttt{device\_id} and \texttt{session\_id}.
+    \item A valid timestamp.
+    \item Sampling rate between 1 and 2000 Hz.
+    \item Non-empty ECG and PPG arrays.
+    \item At most 10000 samples in each signal array.
+    \item Finite numeric values in both ECG and PPG arrays.
+    \item Matching ECG and PPG array lengths.
+    \item Battery value between 0 and 100 when provided.
+\end{itemize}
+
+This validation protects both the database and the AI model adapters. The model code assumes numeric arrays and reasonable sampling rates; rejecting invalid payloads early prevents hidden failures later in signal processing.
+
+\begin{lstlisting}[caption={Pseudocode for backend reading validation}]
+validate ReadingCreate payload:
+    require device_id and session_id
+    require timestamp
+    require 1 <= sampling_rate <= 2000
+    require ecg array length between 1 and 10000
+    require ppg array length between 1 and 10000
+    for each value in ecg and ppg:
+        reject if value is NaN or infinite
+    reject if len(ecg) != len(ppg)
+    if battery exists:
+        require 0 <= battery <= 100
+\end{lstlisting}
+
+\subsection{Session and Patient Association}
+
+The integration must decide which patient owns a captured signal. The firmware identifies itself using \texttt{device\_id} and \texttt{session\_id}; it does not send a full patient profile with every request. This keeps the hardware payload smaller and avoids storing sensitive patient information on the device. The backend resolves the patient in two ways. First, a session may include \texttt{patient\_id} when it is created. Second, a device may already be assigned to a patient, and the backend can copy that assignment into the session.
+
+This matters for AI integration because the blood-pressure model needs patient weight and height to create the metadata vector. The backend helper \texttt{\_analysis\_patient\_for\_session()} checks the session patient first. If the session does not have one, it checks the assigned device patient. If it finds a patient through the device, it updates the session's patient field. This allows the AI layer to receive patient metadata without making the hardware responsible for it.
+
+\begin{lstlisting}[caption={Pseudocode for resolving the patient used during analysis}]
+analysis_patient_for_session(session):
+    if session.patient exists:
+        return session.patient
+
+    if session.device exists and session.device.patient exists:
+        session.patient_id = session.device.patient.id
+        return session.device.patient
+
+    return none
+\end{lstlisting}
+
+The same association also affects alert ownership. When analysis produces a clinical alert, the backend stores the alert with the patient ID if a patient is known. This allows patient and doctor views to filter alerts correctly while keeping the hardware protocol simple.
+
+\section{Storage Integration}
+
+The storage model separates device identity, monitoring sessions, raw readings, analysis results, and clinical alerts. The key database tables for this chapter are:
+
+\begin{itemize}
+    \item \texttt{devices}: persistent record for each physical device.
+    \item \texttt{sessions}: one monitoring session per logical recording period.
+    \item \texttt{raw\_readings}: uploaded batches with ECG, PPG, status, battery, and metadata.
+    \item \texttt{analysis\_results}: output of the multi-model analysis pipeline.
+    \item \texttt{clinical\_alerts}: alert rows generated from signal processing or AI predictions.
+\end{itemize}
+
+The schema uses \texttt{device\_id} and \texttt{session\_id} as integration identifiers between hardware and backend. The hardware does not need to know internal numeric database IDs. The backend maps the external identifiers to database records and can later associate a device or session with a patient.
+
+\subsection{Reading Storage Policy}
+
+The reading storage policy is implemented in \texttt{Backend-bisho/app/services/reading\_storage.py}. Its purpose is to preserve useful signal data while avoiding misleading analysis. The function \texttt{prepare\_reading\_storage()} receives ECG values, PPG values, device status, metadata, and storage configuration. It returns cleaned arrays, sample count, effective status, and enriched metadata.
+
+The policy handles several real-world integration cases:
+
+\begin{itemize}
+    \item If the hardware reports \texttt{no\_finger} but the PPG signal and metadata show enough contact, the backend can override the finger state and store the batch as active.
+    \item If the PPG sensor is off, the PPG channel is dropped while the metadata records why it was removed.
+    \item If the finger is not detected, the PPG channel is dropped to avoid storing stale or ambient-light values as medical signal.
+    \item If ECG leads are off or the ECG signal is flat, the ECG channel is dropped.
+    \item If a channel exceeds the configured maximum sample count, it is downsampled by capping.
+    \item The original sample count and channel summaries remain in metadata for traceability.
+\end{itemize}
+
+\begin{lstlisting}[caption={Pseudocode for reading storage preparation}]
+prepare_reading_storage(ecg, ppg, status, metadata):
+    copy metadata into prepared_metadata
+    effective_status = status
+
+    if status is "no_finger" and backend detects PPG contact:
+        mark original hardware status in metadata
+        set finger_detected = true
+        effective_status = "active"
+
+    create storage metadata:
+        original sample count
+        original ECG and PPG lengths
+        dropped signal list
+        capped signal list
+
+    if compact_invalid_signals is enabled:
+        if PPG sensor is off:
+            record PPG summary and drop PPG array
+        else if no finger is detected:
+            record PPG summary and drop PPG array
+
+        if ECG leads are off or ECG is flat:
+            record ECG summary and drop ECG array
+
+        if PPG remains but is flat:
+            record PPG summary and drop PPG array
+
+    if ECG or PPG arrays exceed max_raw_signal_samples:
+        cap the arrays and record cap metadata
+
+    return cleaned ECG, cleaned PPG, sample count, status, metadata
+\end{lstlisting}
+
+This policy is a key integration decision. It treats signal quality as part of data engineering, not only as a final analysis result. By storing why a channel was removed, the backend keeps enough diagnostic information for debugging while protecting the AI layer from low-information inputs.
+
+\section{Signal Processing Before AI}
+
+Before model inference, the backend runs classical signal processing from \texttt{Backend-bisho/app/services/signal\_processing.py}. This step produces useful metrics even when AI model artifacts are missing, and it also supports AI preprocessing by identifying peaks and quality indicators.
+
+The signal-processing service includes:
+
+\begin{itemize}
+    \item \texttt{flatten\_signal}: combines multiple reading batches into one continuous signal.
+    \item \texttt{detrend}: removes slow baseline drift using a moving average.
+    \item \texttt{detect\_peaks}: finds normalized local maxima with a minimum distance between peaks.
+    \item \texttt{calculate\_rate\_from\_peaks}: estimates heart rate or PPG pulse rate.
+    \item \texttt{calculate\_hrv}: estimates RMSSD and SDNN from ECG peak intervals.
+    \item \texttt{signal\_quality}: scores amplitude, peak count, variance, and dropout ratio.
+    \item \texttt{build\_alerts}: creates alerts for tachycardia risk, bradycardia risk, low HRV, and low signal quality.
+\end{itemize}
+
+\begin{lstlisting}[caption={Pseudocode for signal-processing metrics}]
+analyze_signals(ecg, ppg, sampling_rate):
+    ecg_filtered = detrend(ecg, sampling_rate)
+    ppg_filtered = detrend(ppg, sampling_rate)
+
+    ecg_peaks = detect_peaks(ecg_filtered, sampling_rate)
+    ppg_peaks = detect_peaks(ppg_filtered, sampling_rate)
+
+    heart_rate = rate_from_peaks(ecg_peaks, sampling_rate)
+    ppg_rate = rate_from_peaks(ppg_peaks, sampling_rate)
+    hrv = calculate_hrv(ecg_peaks, sampling_rate)
+
+    ecg_quality = signal_quality(ecg, ecg_peaks, sampling_rate)
+    ppg_quality = signal_quality(ppg, ppg_peaks, sampling_rate)
+
+    perfusion_index = ppg amplitude / ppg mean
+    alerts = build_alerts(heart_rate, hrv, ecg_quality, ppg_quality)
+
+    return filtered signals, peaks, metrics, signal quality, alerts
+\end{lstlisting}
+
+This stage is not a replacement for the trained models. Instead, it gives the inference service a reliable baseline and creates graceful degradation. If TensorFlow is unavailable or a model artifact cannot be loaded, the system can still return heart rate, HRV, signal quality, perfusion index, and signal-based warnings.
+
+\section{AI Model Integration Service}
+
+The central AI integration point is \texttt{Backend-bisho/app/services/ai\_inference.py}. The file defines a model adapter pattern. Each model has a small adapter responsible for loading artifacts, preparing inputs, calling prediction, and returning a dictionary with availability and output information.
+
+The service currently integrates:
+
+\begin{itemize}
+    \item \texttt{ECGInferenceAdapter} for record-level ECG classification.
+    \item \texttt{MorphologyInferenceAdapter} for beat-level ECG morphology classification.
+    \item \texttt{BloodPressureInferenceAdapter} for PPG and patient metadata based blood-pressure estimation.
+\end{itemize}
+
+The adapters are combined by \texttt{InferenceService.analyze()}. This method receives a list of stored readings and an optional patient object. It sorts readings by timestamp, flattens ECG and PPG arrays, selects the most recent analysis window, runs signal processing, runs each AI adapter, normalizes predictions, builds a summary, merges alerts, and returns one structured result.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=1.15cm,
+    block/.style={rectangle, rounded corners, draw, align=center, minimum width=5.2cm, minimum height=0.82cm},
+    data/.style={trapezium, trapezium left angle=70, trapezium right angle=110, draw, align=center, minimum width=5.2cm, minimum height=0.82cm},
+    arrow/.style={-{Latex}, thick}
+]
+\node[data] (readings) {RawReading rows\\ordered by timestamp};
+\node[block, below=of readings] (flatten) {Flatten ECG and PPG batches};
+\node[block, below=of flatten] (window) {Select recent analysis window};
+\node[block, below=of window] (classical) {Run signal processing};
+\node[block, below left=1.05cm and 1.0cm of classical] (ecg) {Record ECG\\classifier};
+\node[block, below=1.05cm of classical] (morph) {Beat morphology\\classifier};
+\node[block, below right=1.05cm and 1.0cm of classical] (bp) {Blood pressure\\model};
+\node[block, below=2.45cm of classical] (normalize) {Normalize predictions\\and model statuses};
+\node[block, below=of normalize] (summary) {Build summary\\and alerts};
+\node[data, below=of summary] (save) {AnalysisResult\\ClinicalAlert rows};
+\draw[arrow] (readings) -- (flatten);
+\draw[arrow] (flatten) -- (window);
+\draw[arrow] (window) -- (classical);
+\draw[arrow] (classical) -- (ecg);
+\draw[arrow] (classical) -- (morph);
+\draw[arrow] (classical) -- (bp);
+\draw[arrow] (ecg) |- (normalize);
+\draw[arrow] (morph) -- (normalize);
+\draw[arrow] (bp) |- (normalize);
+\draw[arrow] (normalize) -- (summary);
+\draw[arrow] (summary) -- (save);
+\end{tikzpicture}
+\caption{AI inference service flow}
+\end{figure}
+
+\subsection{Model Directory Resolution}
+
+Model paths are configured in \texttt{Backend-bisho/app/config.py}:
+
+\begin{itemize}
+    \item \texttt{ecg\_model\_dir = ../AI models/ecg\_classifier\_v31\_deployment}
+    \item \texttt{morphology\_model\_dir = ../AI models/Morphological Heartbeat Arrhythmia Classifier}
+    \item \texttt{bp\_model\_dir = ../AI models/BP\_Model\_Vital\_15\_Meta}
+\end{itemize}
+
+The helper \texttt{\_resolve\_model\_dir()} supports absolute and relative paths. For relative paths, it checks candidates from the backend root, repository root, and current working directory. This makes the integration more robust when the backend is started from different directories during development, testing, or deployment.
+
+\begin{lstlisting}[caption={Pseudocode for resolving a model directory}]
+resolve_model_dir(model_dir):
+    if model_dir is absolute:
+        return model_dir
+
+    backend_root = parent folder of Backend-bisho/app
+    repo_root = parent folder of Backend-bisho
+
+    candidates = [
+        backend_root / model_dir,
+        repo_root / model_dir,
+        current_working_directory / model_dir
+    ]
+
+    return first candidate that exists
+    if none exist, return first candidate for error reporting
+\end{lstlisting}
+
+\subsection{Record-Level ECG Classifier}
+
+The record-level ECG model is deployed in \texttt{AI models/ecg\_classifier\_v31\_deployment/}. Its configuration states that the input shape is \texttt{[1250, 1]} and that the model has five classes:
+
+\begin{itemize}
+    \item \texttt{NORM}: normal ECG.
+    \item \texttt{MI}: myocardial infarction pattern.
+    \item \texttt{STTC}: ST/T wave change.
+    \item \texttt{CD}: conduction disturbance.
+    \item \texttt{HYP}: hypertrophy pattern.
+\end{itemize}
+
+The backend adapter requires at least 1250 ECG samples. At the hardware sampling rate of 250 Hz, 1250 samples represent five seconds of ECG signal. During analysis, the service uses the latest available ECG samples from the analysis window and passes the most recent 1250 samples to the classifier. The deployment wrapper performs scaling and reshaping, then returns probability, confidence, threshold, and detected fields for each class.
+
+\begin{lstlisting}[caption={Pseudocode for record-level ECG inference}]
+predict_record_ecg(ecg_signal):
+    if len(ecg_signal) < 1250:
+        return unavailable with required sample count
+
+    model_input = last 1250 samples from ecg_signal
+    load ECG classifier module if not already loaded
+
+    if classifier cannot load:
+        return unavailable with load error
+
+    classes = classifier.predict(model_input)
+    return:
+        model_available = true
+        classes = probability/confidence map
+        input_sample_count = 1250
+        model_input_shape = [1, 1250, 1]
+\end{lstlisting}
+
+This model acts as the primary ECG decision-support classifier. Its output is later normalized so the backend can identify a top class and assign a risk level. If the top class is \texttt{NORM}, the summary marks arrhythmia risk as low. If the top class is abnormal and confidence is high enough, the summary marks the risk as high; otherwise it marks it as moderate.
+
+\subsection{Prediction Normalization}
+
+Each AI adapter has its own natural output. The ECG models return class maps. The BP model returns numeric estimates. Some adapters can return unavailable status with a reason. To make the rest of the backend easier to use, the inference service normalizes outputs into predictable structures.
+
+For ECG-style models, normalization keeps the class map and adds a \texttt{top\_class}. The top class is selected by probability, then confidence. The normalized object also keeps fields such as sample count, beat count, and model input shape when available.
+
+\begin{lstlisting}[caption={Pseudocode for normalizing ECG model output}]
+normalize_ecg_prediction(prediction):
+    if prediction.model_available is false:
+        return:
+            status = "unavailable"
+            model_available = false
+            reason = prediction.reason
+            sample metadata if present
+
+    classes = prediction.classes
+    top_class = none
+
+    for each class code and values:
+        collect probability, confidence, threshold, detected
+        choose highest probability and then highest confidence
+
+    return:
+        status = "completed"
+        model_available = true
+        classes = classes
+        top_class = selected class
+        input metadata if present
+\end{lstlisting}
+
+For the BP model, normalization keeps systolic pressure, diastolic pressure, confidence, metadata vector, input shapes, source sampling rate, and model sampling rate. If the BP model is unavailable, the normalized object still tells the caller whether the reason was missing patient metadata, missing PPG sequence, missing model artifacts, or another model error.
+
+This normalization is an integration feature, not only a formatting step. It means API clients do not need to know the internal details of every model wrapper. They can read \texttt{status}, \texttt{model\_available}, \texttt{reason}, and the relevant output fields in a consistent way.
+
+\subsection{Beat-Level Morphology Classifier}
+
+The beat-level morphology model is deployed in \texttt{AI models/Morphological Heartbeat Arrhythmia Classifier/}. Its configuration states that it expects a \texttt{[186, 1]} beat window and returns five AAMI-style classes:
+
+\begin{itemize}
+    \item Normal.
+    \item Supraventricular.
+    \item Ventricular.
+    \item Fusion.
+    \item Unknown.
+\end{itemize}
+
+The backend does not send the whole ECG recording directly to this model. Instead, it detrends the ECG signal, detects peaks, creates beat-centered windows, keeps complete windows only, and uses up to the latest eight beats. Each beat is sent through the morphology classifier, then the backend aggregates class predictions across beats.
+
+\begin{lstlisting}[caption={Pseudocode for beat-level morphology inference}]
+predict_morphology(ecg_signal, sampling_rate):
+    if len(ecg_signal) < 186:
+        return unavailable with required window size
+
+    filtered = detrend(ecg_signal, sampling_rate)
+    peaks = detect_peaks(filtered, sampling_rate)
+    beats = []
+
+    for each peak:
+        start = peak - 70
+        end = peak + (186 - 70)
+        if start and end are inside the signal:
+            append ecg_signal[start:end] to beats
+
+    keep latest 8 beats
+
+    if no complete beat windows exist:
+        return unavailable with extraction reason
+
+    load morphology classifier if not loaded
+    predictions = classifier.predict(beat) for each beat
+    aggregate probabilities and confidences by class
+    return aggregated class map and beat count
+\end{lstlisting}
+
+This model complements the record-level classifier. The record-level classifier looks at a fixed ECG segment, while the morphology classifier checks individual heartbeat shapes. This gives the backend two different ECG perspectives and allows the final result to include both record-level and beat-level status.
+
+\subsection{Blood-Pressure Model}
+
+The blood-pressure model is deployed in \texttt{AI models/BP\_Model\_Vital\_15\_Meta/}. It estimates systolic and diastolic values from a PPG beat sequence and patient metadata. The backend adapter uses the following input assumptions:
+
+\begin{itemize}
+    \item Target model sampling rate: 125 Hz.
+    \item Samples per beat: 128.
+    \item Sequence length: 5 beats.
+    \item Pre-peak samples: 30.
+    \item Post-peak samples: 98.
+    \item Beat features: normalized signal, first derivative, and second derivative.
+    \item Metadata vector: weight, height in centimeters, and BMI.
+\end{itemize}
+
+The hardware samples at 250 Hz, but the blood-pressure model expects 125 Hz. Therefore, the backend adapter resamples the PPG signal before peak detection and beat extraction. Patient metadata is taken from the assigned patient object. If weight or height is missing or invalid, the BP model returns an unavailable status rather than producing a false value.
+
+\begin{lstlisting}[caption={Pseudocode for blood-pressure inference}]
+predict_blood_pressure(ppg_signal, sampling_rate, patient):
+    meta_vector = [weight, height_cm, bmi] from patient
+    if metadata is missing:
+        return unavailable because BP model requires patient metadata
+
+    load BP Keras model and scaler artifacts
+    if model cannot load:
+        return unavailable with load error
+
+    ppg_125hz = resample ppg_signal from sampling_rate to 125 Hz
+    filtered = detrend(ppg_125hz, 125)
+    peaks = detect_peaks(filtered, 125)
+
+    beats = centered windows around peaks:
+        30 samples before peak
+        98 samples after peak
+
+    if fewer than 5 complete beats:
+        return unavailable because sequence cannot be built
+
+    sequence = latest 5 beats
+    for each beat:
+        compute normalized signal, first derivative, second derivative
+
+    prediction = model.predict(sequence input, metadata input)
+    inverse-transform BP values if scaler is available
+    return systolic, diastolic, confidence, and input shapes
+\end{lstlisting}
+
+This part of the integration shows why the backend must know both signal data and patient records. The hardware alone cannot compute BMI unless patient details are stored locally, which would be insecure and unnecessary. The AI model also cannot infer BP from metadata alone. The backend connects the two sources at analysis time.
+
+\section{Output Contract for Analysis Results}
+
+The analysis result returned by the backend is intentionally structured as a combination of metrics, signal quality, model predictions, summary, alerts, and disclaimer. This structure makes the output usable by different consumers. A charting screen can use the metrics and signal quality. A doctor review screen can use the alerts and prediction summary. A debugging screen can inspect model input sizes and unavailable reasons.
+
+\begin{lstlisting}[caption={Conceptual structure of an analysis result}]
+{
+  "model_name": "ecg_ppg_multi_model_pipeline",
+  "model_version": "2026.06.30",
+  "status": "completed or degraded",
+  "metrics": {
+    "heart_rate_bpm": 78.4,
+    "ppg_rate_bpm": 77.9,
+    "hrv_rmssd_ms": 32.1,
+    "hrv_sdnn_ms": 45.0,
+    "perfusion_index_percent": 1.86,
+    "spo2_percent": 97.4,
+    "ai_input": {
+      "reading_count": 60,
+      "sampling_rate_hz": 250,
+      "ecg_samples": 7500,
+      "ppg_samples": 7500,
+      "analyzed_ecg_samples": 7500,
+      "analyzed_ppg_samples": 7500
+    }
+  },
+  "signal_quality": {
+    "ecg": {"score": 0.86, "label": "good"},
+    "ppg": {"score": 0.72, "label": "fair"}
+  },
+  "predictions": {
+    "models": {
+      "ecg_arrhythmia_v31": {},
+      "morphology_heartbeat_v1": {},
+      "blood_pressure_vital_meta": {}
+    },
+    "summary": {
+      "arrhythmia_risk": "low",
+      "heart_rate_bpm": 78.4,
+      "morphology_status": "completed",
+      "blood_pressure_status": "completed"
+    }
+  },
+  "alerts": [],
+  "disclaimer": "Decision-support only, not a final medical diagnosis."
+}
+\end{lstlisting}
+
+The top-level \texttt{status} is \texttt{completed} only when all model prediction objects complete. If one or more models are unavailable, the top-level status becomes \texttt{degraded}. This is more informative than a binary success or failure response. The API request can succeed even if one model is unavailable, because the backend still produces valid partial analysis.
+
+\section{Complete Analysis Workflow}
+
+The main analysis workflow is implemented in \texttt{InferenceService.analyze()}. It requires at least one reading. It sorts readings, flattens signal chunks, determines how many recent samples to analyze, runs signal processing, enriches metrics with AI input information, incorporates recent SpO2 metadata, calculates or reuses perfusion index, and runs all three AI adapters.
+
+The analysis window is based on the maximum of:
+
+\begin{itemize}
+    \item \texttt{sampling\_rate * 30} for a 30-second recent window.
+    \item \texttt{1250} samples required by the ECG record classifier.
+    \item \texttt{128 * 5 * 4} samples to support blood-pressure sequence extraction with enough extra signal for peak detection.
+\end{itemize}
+
+This keeps analysis focused on recent data while still ensuring that each model receives enough signal when possible.
+
+\begin{lstlisting}[caption={Pseudocode for the complete backend AI analysis}]
+analyze(readings, patient):
+    if readings is empty:
+        reject analysis
+
+    sorted_readings = readings ordered by timestamp
+    sampling_rate = first reading sampling rate or 250
+
+    total_ecg = flatten all reading.ecg arrays
+    total_ppg = flatten all reading.ppg arrays
+
+    analysis_samples = max(
+        sampling_rate * 30,
+        1250,
+        128 * 5 * 4
+    )
+
+    ecg = latest analysis_samples from total_ecg
+    ppg = latest analysis_samples from total_ppg
+
+    signal_result = analyze_signals(ecg, ppg, sampling_rate)
+    add ai_input metadata to signal_result.metrics
+    add recent hardware SpO2 estimate if available
+    add hardware perfusion index if available
+
+    ecg_prediction = run record-level ECG adapter with timeout/retry
+    morphology_prediction = run morphology adapter with timeout/retry
+    bp_prediction = run BP adapter with timeout/retry
+
+    normalize all predictions to a common structure
+    summary = build arrhythmia risk and model statuses
+    alerts = signal alerts + AI prediction alerts
+
+    status = completed if all models completed else degraded
+
+    return model name, version, status, metrics,
+           signal quality, predictions, alerts, disclaimer
+\end{lstlisting}
+
+\section{Manual and Automatic Analysis}
+
+The backend supports two analysis modes.
+
+Manual analysis is exposed through \texttt{POST /api/analyze/\{session\_id\}}. This endpoint loads the session, gets readings ordered by timestamp, rejects empty sessions, checks the latest capture issue, runs \texttt{\_save\_analysis()}, commits the result, and returns the saved \texttt{AnalysisResult}.
+
+Automatic analysis is controlled by \texttt{settings.auto\_analyze\_on\_upload}. When enabled, the ingestion endpoint calls \texttt{\_maybe\_auto\_analyze()} after saving a reading. The backend counts ECG samples, compares them against the maximum of the configured minimum and the record-level ECG requirement, skips analysis if there is a capture issue, and enqueues the session using \texttt{analysis\_worker.enqueue\_analysis()}.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=1.1cm,
+    block/.style={rectangle, rounded corners, draw, align=center, minimum width=4.6cm, minimum height=0.78cm},
+    decision/.style={diamond, aspect=2.3, draw, align=center, inner sep=1pt},
+    arrow/.style={-{Latex}, thick}
+]
+\node[block] (saved) {Reading saved};
+\node[decision, below=of saved] (enabled) {Auto-analysis\\enabled?};
+\node[decision, below=of enabled] (samples) {Enough ECG\\samples?};
+\node[decision, below=of samples] (issue) {Capture issue\\present?};
+\node[block, below left=1.0cm and 1.2cm of issue] (skip) {Skip auto-analysis};
+\node[block, below right=1.0cm and 1.2cm of issue] (queue) {Queue session ID};
+\node[block, below=of queue] (worker) {Background worker\\loads readings};
+\node[block, below=of worker] (result) {Save analysis\\and alerts};
+\draw[arrow] (saved) -- (enabled);
+\draw[arrow] (enabled) -- node[right]{yes} (samples);
+\draw[arrow] (samples) -- node[right]{yes} (issue);
+\draw[arrow] (issue) -- node[left]{yes} (skip);
+\draw[arrow] (issue) -- node[right]{no} (queue);
+\draw[arrow] (queue) -- (worker);
+\draw[arrow] (worker) -- (result);
+\draw[arrow] (enabled.west) -- ++(-1.2,0) |- node[left]{no} (skip);
+\draw[arrow] (samples.west) -- ++(-1.2,0) |- node[left]{no} (skip);
+\end{tikzpicture}
+\caption{Automatic analysis decision flow}
+\end{figure}
+
+The automatic mode is useful for continuous monitoring, but the manual endpoint is important during testing and demonstrations because the team can upload a controlled session and trigger analysis exactly when enough data has been captured.
+
+\section{Saving Analysis Results and Alerts}
+
+When analysis is complete, \texttt{\_save\_analysis()} writes an \texttt{AnalysisResult} row. The saved fields include:
+
+\begin{itemize}
+    \item \texttt{session\_id}
+    \item \texttt{model\_name}
+    \item \texttt{model\_version}
+    \item \texttt{status}
+    \item \texttt{metrics}
+    \item \texttt{signal\_quality}
+    \item \texttt{predictions}
+    \item \texttt{alerts}
+    \item \texttt{disclaimer}
+\end{itemize}
+
+For each alert returned by the analysis service, the backend also inserts a \texttt{ClinicalAlert} row. If the session is associated with a patient, the alert is linked to that patient. This makes AI output actionable by the rest of the backend without requiring every client to parse the full prediction JSON.
+
+\begin{lstlisting}[caption={Pseudocode for saving analysis and clinical alerts}]
+save_analysis(session_id, readings, patient):
+    result = inference_service.analyze(readings, patient)
+
+    analysis = AnalysisResult(
+        session_id = session_id,
+        model_name = result.model_name,
+        model_version = result.model_version,
+        status = result.status,
+        metrics = result.metrics,
+        signal_quality = result.signal_quality,
+        predictions = result.predictions,
+        alerts = result.alerts,
+        disclaimer = result.disclaimer
+    )
+    insert analysis
+
+    for each alert in result.alerts:
+        insert ClinicalAlert(
+            patient_id = patient.id if patient exists,
+            session_id = session_id,
+            analysis_id = analysis.id,
+            severity = alert.severity,
+            code = alert.code,
+            message = alert.message
+        )
+
+    return analysis
+\end{lstlisting}
+
+The disclaimer saved with every result is also part of the integration contract. The AI output is decision support only and is not treated as a final medical diagnosis.
+
+\section{Backend-to-Hardware Feedback}
+
+The integration is bidirectional. The hardware sends readings to the backend, and the backend returns command hints in the reading response. These commands are built by \texttt{\_build\_device\_commands()} in \texttt{Backend-bisho/routers/ecg\_pipeline.py}. The firmware then checks the response text for command types and prints operational messages over serial.
+
+The backend can return these command types:
+
+\begin{itemize}
+    \item \texttt{check\_sensor\_contact}: returned when PPG is offline, no finger is detected, or ECG leads are off.
+    \item \texttt{low\_battery\_warning}: returned when battery level is below 20 percent.
+    \item \texttt{retry\_capture}: returned when analysis exists and signal quality is low.
+    \item \texttt{clinical\_review}: returned when the ECG model detects a possible abnormal ECG pattern.
+    \item \texttt{continue}: returned when no higher-priority command is needed.
+\end{itemize}
+
+\begin{lstlisting}[caption={Pseudocode for backend command generation}]
+build_device_commands(reading, latest_analysis):
+    commands = []
+
+    if PPG sensor is offline:
+        add check_sensor_contact command with high priority
+    else if finger is not detected:
+        add check_sensor_contact command with high priority
+
+    if reading status is leads_off:
+        add check_sensor_contact command for ECG electrodes
+
+    if battery is known and below 20:
+        add low_battery_warning command
+
+    if latest_analysis exists:
+        if ECG signal quality score is below 0.45:
+            add retry_capture command
+
+        top_class = latest ECG arrhythmia prediction
+        if top_class exists and top_class code is not NORM:
+            add clinical_review command
+
+    if commands is empty:
+        add continue command
+
+    return commands
+\end{lstlisting}
+
+This feedback loop improves the practical reliability of the system. The backend does not only store data after the fact; it can tell the hardware-side operator to check electrodes, place a finger correctly, retry a low-quality capture, or escalate abnormal results for review.
+
+\section{Error Handling and Degraded Operation}
+
+The integration deliberately supports degraded operation. In a real graduation project environment, TensorFlow may not be installed on every test machine, model artifact files may be missing, patient metadata may be incomplete, or a sensor may be temporarily disconnected. The backend should still return a useful structured response.
+
+Examples of degraded behavior include:
+
+\begin{itemize}
+    \item The record-level ECG adapter returns unavailable if fewer than 1250 ECG samples exist.
+    \item The morphology adapter returns unavailable if no complete beat-centered windows can be extracted.
+    \item The BP adapter returns unavailable if patient weight or height is missing.
+    \item Any model adapter returns unavailable if TensorFlow or a model file cannot be loaded.
+    \item The final analysis status becomes \texttt{degraded} if not all model predictions completed.
+    \item Signal metrics and signal-quality alerts can still be returned even when AI models are unavailable.
+\end{itemize}
+
+\begin{lstlisting}[caption={Pseudocode for model call retry and unavailable status}]
+predict_with_timeout(function, timeout_seconds, args):
+    attempts = max(1, retry_attempts + 1)
+    last_error = none
+
+    for attempt in attempts:
+        start timer
+        try:
+            result = function(args)
+            if elapsed time exceeds timeout_seconds:
+                log timeout warning
+            if result is dictionary:
+                add status = completed when model_available is true
+                add status = unavailable when model_available is false
+            return result
+        except exception as error:
+            last_error = error message
+            log failure
+
+    return {
+        "status": "unavailable",
+        "model_available": false,
+        "reason": last_error
+    }
+\end{lstlisting}
+
+This approach is safer than hiding missing outputs. Clients can see exactly which model completed and which model was unavailable, including the reason. This makes demonstrations, testing, and debugging easier.
+
+\section{Security at the Integration Boundary}
+
+The device ingestion route can be protected using \texttt{settings.device\_ingest\_token}. When the setting is non-empty, the backend requires the hardware request to include the same value in the \texttt{X-Device-Token} header. The firmware supports this through \texttt{DEVICE\_API\_KEY} in \texttt{hardware/config.example.h}.
+
+\begin{lstlisting}[caption={Pseudocode for optional device-token protection}]
+require_device_token(request):
+    expected = settings.device_ingest_token
+    if expected is empty:
+        allow request
+
+    provided = request header "X-Device-Token"
+    if provided is missing or does not match expected:
+        reject with 401 Unauthorized
+\end{lstlisting}
+
+This is not a full enterprise IoT security system, but it is a practical integration control for the project. It prevents random clients on the network from uploading fake readings when a token is configured. For production, this should be extended with per-device tokens, TLS, token rotation, request signing, and stronger device provisioning.
+
+\section{Timing, Sampling, and Model Input Alignment}
+
+A major integration challenge is that the hardware and the AI models operate at different levels of abstraction. The hardware samples continuously at 250 Hz. The AI models require fixed-size tensors:
+
+\begin{itemize}
+    \item Record ECG classifier: 1250 ECG samples.
+    \item Morphology classifier: 186 samples per beat window.
+    \item BP model: five PPG beats, each represented as 128 samples and three feature channels, at 125 Hz.
+\end{itemize}
+
+The backend solves this mismatch by flattening batches into longer session signals, selecting recent windows, resampling when required, detecting peaks, and extracting model-specific windows. The same uploaded readings can therefore support multiple models without changing the hardware payload shape.
+
+\begin{longtable}{p{0.26\textwidth}p{0.28\textwidth}p{0.36\textwidth}}
+\caption{Sampling and tensor alignment across the integration}\\
+\toprule
+\textbf{Component} & \textbf{Native Shape or Rate} & \textbf{Backend Alignment Step}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Component} & \textbf{Native Shape or Rate} & \textbf{Backend Alignment Step}\\
+\midrule
+\endhead
+ESP32 firmware & 250 Hz, 125 samples per batch & Batches are flattened by session before analysis.\\
+Record ECG classifier & \texttt{[1, 1250, 1]} & Last 1250 ECG samples are selected.\\
+Morphology classifier & \texttt{[beat\_count, 186, 1]} & ECG peaks are detected and complete beat-centered windows are extracted.\\
+BP model & \texttt{[1, 5, 128, 3]} plus metadata & PPG is resampled to 125 Hz, peaks are detected, five beats are converted into signal and derivative features.\\
+Signal metrics & Variable length ECG and PPG arrays & Recent analysis window is detrended, peak-detected, and quality-scored.\\
+\bottomrule
+\end{longtable}
+
+\section{End-to-End Sequence}
+
+The following sequence diagram summarizes the main runtime interaction.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    lifeline/.style={draw, minimum height=8.8cm},
+    actor/.style={rectangle, draw, rounded corners, align=center, minimum width=2.5cm},
+    msg/.style={-{Latex}, thick},
+    note/.style={rectangle, draw, align=left, text width=3.0cm}
+]
+\node[actor] (hw) at (0,0) {ESP32\\Firmware};
+\node[actor] (api) at (4,0) {FastAPI\\Router};
+\node[actor] (db) at (8,0) {Database};
+\node[actor] (ai) at (12,0) {AI\\Service};
+\draw[lifeline] (0,-0.6) -- (0,-8.8);
+\draw[lifeline] (4,-0.6) -- (4,-8.8);
+\draw[lifeline] (8,-0.6) -- (8,-8.8);
+\draw[lifeline] (12,-0.6) -- (12,-8.8);
+\draw[msg] (hw) ++(0,-1.1) -- node[above]{POST reading JSON} ++(4,0);
+\draw[msg] (api) ++(0,-1.8) -- node[above]{upsert device/session} ++(4,0);
+\draw[msg] (api) ++(0,-2.5) -- node[above]{insert raw reading} ++(4,0);
+\draw[msg] (api) ++(0,-3.2) -- node[above]{commands in response} ++(-4,0);
+\draw[msg] (hw) ++(0,-4.2) -- node[above]{more batches} ++(4,0);
+\draw[msg] (api) ++(0,-5.1) -- node[above]{load session readings} ++(4,0);
+\draw[msg] (api) ++(0,-5.9) -- node[above]{analyze(readings, patient)} ++(8,0);
+\draw[msg] (ai) ++(0,-6.7) -- node[above]{metrics, predictions, alerts} ++(-8,0);
+\draw[msg] (api) ++(0,-7.5) -- node[above]{save analysis and alerts} ++(4,0);
+\end{tikzpicture}
+\caption{Runtime sequence for readings, analysis, and feedback}
+\end{figure}
+
+\section{Testing the Integration}
+
+The repository includes backend tests that target this integration area. The important test paths are:
+
+\begin{itemize}
+    \item \texttt{Backend-bisho/tests/test\_ai\_integration.py}
+    \item \texttt{Backend-bisho/tests/test\_ecg\_pipeline\_api.py}
+    \item \texttt{Backend-bisho/tests/test\_signal\_processing.py}
+\end{itemize}
+
+These tests are important because most integration bugs appear at boundaries. Examples include payload shape mismatches, invalid sample lengths, missing metadata, duplicate reading insertion, missing model artifacts, and sessions that do not have enough samples for analysis. Unit tests for individual model wrappers are useful, but API-level tests are necessary because the project depends on the complete path from JSON payload to saved analysis.
+
+\begin{lstlisting}[caption={Recommended integration test scenarios}]
+test reading upload:
+    send valid payload with ECG and PPG arrays
+    expect created reading and stored session
+
+test duplicate upload:
+    send same session_id and timestamp twice
+    expect second response to return existing reading
+
+test invalid signal:
+    send NaN, infinite, or mismatched ECG/PPG lengths
+    expect validation error
+
+test capture issue:
+    upload no_finger or ppg_sensor_off batch
+    expect command to check sensor contact
+    expect analysis endpoint to reject unusable capture
+
+test degraded AI:
+    run analysis with insufficient ECG samples
+    expect model status unavailable, not server crash
+
+test alert creation:
+    mock abnormal ECG prediction
+    expect analysis result and clinical alert row
+\end{lstlisting}
+
+\section{Design Rationale}
+
+The main design decision is to keep the backend as the translation layer between hardware realities and AI requirements. This is better than embedding model-specific logic in the firmware because the ESP32 has limited memory, limited compute, and should remain focused on stable acquisition. It is also better than letting AI scripts read raw files directly because the project needs authentication, sessions, patient association, clinical alerts, and repeatable API behavior.
+
+The adapter pattern also keeps the AI integration maintainable. Each model can change internally as long as its adapter still returns the same normalized fields. For example, the ECG model may later be replaced with another Keras model, ONNX model, or cloud inference endpoint. The backend route and database result shape would not need to change dramatically if the adapter preserves the same contract.
+
+The storage compaction policy is another important design decision. In medical signal projects, storing every raw number is tempting, but invalid channels can mislead both users and models. The current policy keeps metadata summaries for dropped channels while removing arrays that are known to be unusable. This preserves traceability while reducing the chance of false analysis.
+
+\section{Limitations and Future Improvements}
+
+The current integration is strong enough for a graduation project prototype, but several improvements would be required for a production medical system:
+
+\begin{itemize}
+    \item Add per-device credentials instead of one shared optional ingest token.
+    \item Use HTTPS/TLS for all hardware-to-backend communication.
+    \item Add server-side rate limiting and replay protection for device uploads.
+    \item Add stronger time synchronization checks for device timestamps.
+    \item Store model artifact checksums and expose them in model metadata.
+    \item Record model inference latency for every analysis.
+    \item Add calibration workflows for ECG voltage and PPG thresholds.
+    \item Use a structured JSON parser on the firmware side for backend commands instead of substring checks.
+    \item Add asynchronous task persistence for the analysis worker so queued jobs survive backend restarts.
+    \item Add doctor-reviewed labels to improve future model validation.
+\end{itemize}
+
+\section{Conclusion}
+
+The AI-backend-hardware integration in this project is built around a practical end-to-end pipeline. The ESP32 firmware captures ECG and PPG data, evaluates basic contact conditions, batches samples, and uploads JSON readings. The FastAPI backend validates payloads, creates devices and sessions, stores readings with signal-aware compaction, and exposes analysis endpoints. The AI inference service converts stored readings into signal metrics, ECG classifications, morphology classifications, blood-pressure estimates, summaries, and clinical alerts. Finally, the backend returns command hints to the device so the physical capture process can respond to sensor problems or analysis outcomes.
+
+This chapter shows that the integration is not a simple connection between three folders. It is a set of contracts: hardware payload contracts, backend schema contracts, database persistence contracts, model input contracts, output normalization contracts, and feedback contracts. These contracts make the system understandable, testable, and extensible.
