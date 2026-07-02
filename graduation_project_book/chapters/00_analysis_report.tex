@@ -1,0 +1,25 @@
+\chapter*{Internal Analysis Report}
+\addcontentsline{toc}{chapter}{Internal Analysis Report}
+
+This report summarizes the implementation facts detected before writing the graduation project book. The book content is based on the project files in the repository and avoids adding unsupported claims where the code does not provide evidence.
+
+\begin{longtable}{p{0.27\textwidth} p{0.66\textwidth}}
+\caption{Pre-writing project analysis summary}\\
+\toprule
+\textbf{Item} & \textbf{Detected evidence}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Item} & \textbf{Detected evidence}\\
+\midrule
+\endhead
+Detected project type & Full-stack medical monitoring system with Flutter frontend, FastAPI backend, PostgreSQL database, ESP32 firmware, and local AI model artifacts.\\
+Detected technologies & Flutter/Dart, FastAPI, SQLAlchemy, Alembic, PostgreSQL, JWT authentication, Pydantic validation, TensorFlow/Keras model adapters, Python signal-processing services, Arduino/ESP32 firmware, MAX30105 PPG sensor, ECG analog input, pytest, and Flutter tests.\\
+Main modules & Authentication, patient profile, doctor workflow, appointments, contacts, reminders, medical records, prescriptions, lab results, catalogs, admin dashboard, ECG/PPG device ingestion, session analysis, AI inference, signal chart visualization, and medical chat integration through Gemini configuration.\\
+User roles & Patient, doctor, and admin. The code enforces role-specific access in patient, appointment, alert, medical-record, prescription, lab-result, device-assignment, and admin routes.\\
+Main features & User registration/login, role-based navigation, profile editing, doctor selection, patient management, appointment scheduling, reminder and contact management, ECG/PPG session listing, device assignment, signal charts, AI metrics, alerts, and clinical decision-support disclaimers.\\
+Database structure & SQLAlchemy models define users, emergencies, posts, votes, contacts, reminders, appointments, medical records, prescriptions, lab results, clinics, medications, devices, sessions, raw readings, analysis results, and clinical alerts. Alembic migration files exist under \texttt{Backend-bisho/DB/versions}.\\
+Suggested chapter focus & The book should emphasize a medical IoT pipeline: hardware acquisition, backend validation and persistence, AI-assisted signal interpretation, role-based clinical workflows, and Flutter visualization.\\
+Missing or limited information & No formal deployment descriptor, no screenshots prepared for the thesis folder, no verified clinical trial results, and no evidence of regulatory approval. These must be presented as limitations or future work, not as completed achievements.\\
+\bottomrule
+\end{longtable}

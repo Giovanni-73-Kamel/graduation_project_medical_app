@@ -1,0 +1,60 @@
+\chapter{System Analysis}
+
+\section{Main Actors}
+
+The main actors are patient, doctor, admin, ESP32 hardware device, and backend analysis services. The patient uses the application for personal health-management tasks and monitoring views. The doctor manages assigned patients and appointments. The admin accesses broader management information. The hardware device uploads readings. The analysis services process stored sessions and produce metrics and alerts.
+
+\section{Use Case Overview}
+
+\begin{longtable}{p{0.22\textwidth} p{0.25\textwidth} p{0.43\textwidth}}
+\caption{Main use cases}\\
+\toprule
+\textbf{Use case} & \textbf{Actor} & \textbf{Description}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Use case} & \textbf{Actor} & \textbf{Description}\\
+\midrule
+\endhead
+Authenticate & Patient, doctor, admin & User logs in and receives a JWT access token.\\
+Manage profile & Patient, doctor & User retrieves and updates personal information.\\
+Manage patients & Doctor & Doctor creates, views, edits, or deletes patient entries where permitted.\\
+Manage appointments & Doctor & Doctor creates and updates appointments for patients.\\
+Manage reminders & Patient & Patient creates, updates, lists, and deletes reminders.\\
+Upload readings & Hardware device & ESP32 sends ECG/PPG arrays and metadata to the backend.\\
+Analyze session & User or worker & Backend analyzes session readings and stores an analysis result.\\
+View heart session & Patient, doctor, admin & Flutter app retrieves sessions, readings, and analysis for chart display.\\
+Resolve alert & Doctor, admin & Authorized user marks a clinical alert as resolved.\\
+\bottomrule
+\end{longtable}
+
+\section{Data Flow}
+
+Figure \ref{fig:data-flow} summarizes the main data path.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=1.5cm,
+    box/.style={rectangle,draw,rounded corners,align=center,minimum width=2.8cm,minimum height=0.9cm},
+    arrow/.style={-{Latex[length=3mm]},thick}
+]
+\node[box] (sensor) {ESP32\\ECG/PPG};
+\node[box,right=of sensor] (api) {FastAPI\\Validation};
+\node[box,right=of api] (db) {PostgreSQL\\Storage};
+\node[box,below=of db] (ai) {Signal and AI\\Analysis};
+\node[box,left=of ai] (app) {Flutter\\Application};
+\draw[arrow] (sensor) -- node[above]{JSON batches} (api);
+\draw[arrow] (api) -- node[above]{models} (db);
+\draw[arrow] (db) -- (ai);
+\draw[arrow] (ai) -- (db);
+\draw[arrow] (app) -- node[left]{REST} (api);
+\draw[arrow] (api) -- (app);
+\end{tikzpicture}
+\caption{End-to-end data flow from hardware to mobile visualization}
+\label{fig:data-flow}
+\end{figure}
+
+\section{Workflow Description}
+
+The ECG/PPG monitoring workflow begins when the ESP32 firmware samples ECG and PPG data. It forms a batch, evaluates sensor status, builds a JSON payload, and posts it to \texttt{/api/readings}. The backend validates the request, creates the device and session if needed, prepares storage by compacting invalid signals when configured, stores the raw reading, and returns device commands. A user can later request analysis with \texttt{/api/analyze/\{session\_id\}}, or automatic analysis can be queued if enabled. The Flutter app retrieves sessions, readings, and analysis results and displays signal charts, metrics, signal quality, alerts, and disclaimers.

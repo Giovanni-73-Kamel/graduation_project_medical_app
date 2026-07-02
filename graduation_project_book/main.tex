@@ -1,0 +1,90 @@
+\documentclass[12pt,oneside]{book}
+
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{enumitem}
+\usepackage{setspace}
+\usepackage{fancyhdr}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=blue,
+    pdftitle={Medical App V3 Graduation Project Book},
+    pdfauthor={Graduation Project Team}
+}
+
+\definecolor{codegray}{RGB}{245,245,245}
+\definecolor{codetext}{RGB}{34,34,34}
+\lstset{
+    backgroundcolor=\color{codegray},
+    basicstyle=\ttfamily\small\color{codetext},
+    breaklines=true,
+    frame=single,
+    columns=fullflexible,
+    keepspaces=true,
+    captionpos=b
+}
+
+\setstretch{1.25}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{Medical App V3}
+\fancyhead[R]{Graduation Project Book}
+\fancyfoot[C]{\thepage}
+
+\begin{document}
+
+\begin{titlepage}
+    \centering
+    \vspace*{1.5cm}
+    {\Huge\bfseries Medical App V3\par}
+    \vspace{0.5cm}
+    {\Large A Full-Stack Medical Monitoring and AI-Assisted Signal Analysis System\par}
+    \vspace{1.5cm}
+    {\large Graduation Project Book\par}
+    \vfill
+    {\large Department of Computer Science / Software Engineering\par}
+    {\large \today\par}
+\end{titlepage}
+
+\frontmatter
+\tableofcontents
+\listoffigures
+\listoftables
+
+\input{chapters/00_analysis_report}
+
+\mainmatter
+\input{chapters/01_abstract}
+\input{chapters/02_introduction}
+\input{chapters/03_problem_statement}
+\input{chapters/04_project_objectives}
+\input{chapters/05_literature_review}
+\input{chapters/06_requirements_analysis}
+\input{chapters/07_system_analysis}
+\input{chapters/08_system_design_and_architecture}
+\input{chapters/09_database_design}
+\input{chapters/10_implementation}
+\input{chapters/11_testing_and_evaluation}
+\input{chapters/12_results_and_discussion}
+\input{chapters/13_conclusion_and_future_work}
+\input{chapters/14_appendices}
+
+\backmatter
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

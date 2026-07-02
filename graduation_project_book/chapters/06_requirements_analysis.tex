@@ -1,0 +1,71 @@
+\chapter{Requirements Analysis}
+
+Requirements were extracted from the Flutter screens, backend routers, schemas, models, tests, firmware, and README file.
+
+\section{User Roles}
+
+\begin{table}[H]
+\centering
+\caption{Detected user roles}
+\begin{tabular}{p{0.2\textwidth} p{0.65\textwidth}}
+\toprule
+\textbf{Role} & \textbf{Responsibilities and access}\\
+\midrule
+Patient & Register, login, update profile, select doctor, manage reminders and contacts, view assigned device/session information, and view personal monitoring results.\\
+Doctor & Manage assigned patients, create and manage appointments, view related medical information, assign devices to permitted patients, and resolve eligible alerts.\\
+Admin & Access dashboard statistics, list users, manage wider device assignment, and view broader system information.\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Functional Requirements}
+
+\begin{longtable}{p{0.16\textwidth} p{0.74\textwidth}}
+\caption{Functional requirements}\\
+\toprule
+\textbf{ID} & \textbf{Requirement}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{ID} & \textbf{Requirement}\\
+\midrule
+\endhead
+FR1 & The system shall allow users to register with profile information, role, contact information, doctor data, and emergency contact data.\\
+FR2 & The system shall authenticate users through a login endpoint and store bearer tokens in the Flutter client using shared preferences.\\
+FR3 & The system shall route users to doctor or patient home screens based on the authenticated profile role.\\
+FR4 & The system shall allow users to view and update their own profile.\\
+FR5 & The system shall allow doctors to create, view, update, and delete patients assigned to them.\\
+FR6 & The system shall allow doctors to create and manage appointments.\\
+FR7 & The system shall allow patients to manage contacts and reminders.\\
+FR8 & The system shall allow medical records, prescriptions, and lab results to be created and retrieved under role-aware authorization rules.\\
+FR9 & The system shall receive ECG/PPG readings from a device through \texttt{/api/readings}.\\
+FR10 & The system shall validate signal arrays, sampling rates, battery values, and matching ECG/PPG lengths before storage.\\
+FR11 & The system shall store devices, monitoring sessions, raw readings, analysis results, and clinical alerts.\\
+FR12 & The system shall analyze sessions and return metrics, signal quality, model predictions, alerts, and disclaimers.\\
+FR13 & The Flutter application shall list monitoring sessions, display ECG/PPG charts, show metrics, and allow manual analysis execution.\\
+FR14 & The backend shall return device commands such as sensor-contact checks, low-battery warning, retry capture, clinical review, or continue sampling.\\
+\bottomrule
+\end{longtable}
+
+\section{Non-Functional Requirements}
+
+\begin{table}[H]
+\centering
+\caption{Non-functional requirements}
+\begin{tabular}{p{0.22\textwidth} p{0.63\textwidth}}
+\toprule
+\textbf{Quality} & \textbf{Requirement}\\
+\midrule
+Security & Passwords shall be hashed, authenticated routes shall require bearer tokens, and optional device ingestion tokens shall protect hardware upload endpoints.\\
+Usability & The Flutter app shall provide loading, error, retry, empty, and role-specific states.\\
+Reliability & Duplicate readings shall be controlled through a unique session-timestamp constraint. Invalid or low-information signals shall be compacted or flagged.\\
+Maintainability & Backend functionality shall be organized into routers, schemas, models, and service modules.\\
+Scalability & The database shall use indexes for common lookup fields such as device, session, timestamp, and analysis creation time.\\
+Safety & AI output shall include a decision-support disclaimer and shall not be presented as final diagnosis.\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{System Constraints}
+
+The backend depends on configured database credentials and optional model directories. The blood-pressure model requires patient metadata such as positive height and weight. Hardware upload depends on Wi-Fi configuration and sensor wiring. Formal clinical validation and regulatory approval are outside the current repository evidence and must be considered future work.

@@ -1,0 +1,122 @@
+\chapter{Appendices}
+
+\section{API Documentation Summary}
+
+\begin{longtable}{p{0.28\textwidth} p{0.18\textwidth} p{0.44\textwidth}}
+\caption{Selected API endpoints}\\
+\toprule
+\textbf{Endpoint} & \textbf{Method} & \textbf{Purpose}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Endpoint} & \textbf{Method} & \textbf{Purpose}\\
+\midrule
+\endhead
+\texttt{/login/} & POST & Authenticate user and return token.\\
+\texttt{/users/} & POST & Register user.\\
+\texttt{/users/me} & GET/PUT/PATCH & Retrieve or update current profile.\\
+\texttt{/patients/} & GET & List patients for authorized doctor.\\
+\texttt{/appointments/} & GET & List appointments.\\
+\texttt{/appointments/createappointment/} & POST & Create appointment.\\
+\texttt{/contacts/} & GET & List contacts.\\
+\texttt{/reminders/} & GET & List reminders.\\
+\texttt{/medical-records/patient/\{id\}} & GET & Retrieve patient medical records.\\
+\texttt{/prescriptions/appointment/\{id\}} & GET & Retrieve prescriptions by appointment.\\
+\texttt{/lab-results/appointment/\{id\}} & GET & Retrieve lab results by appointment.\\
+\texttt{/api/sessions} & POST/GET & Create or list monitoring sessions.\\
+\texttt{/api/readings} & POST & Upload ECG/PPG reading batch.\\
+\texttt{/api/analyze/\{session\_id\}} & POST & Analyze a monitoring session.\\
+\texttt{/api/devices} & GET & List hardware devices.\\
+\texttt{/api/devices/\{device\_id\}/assign} & PATCH & Assign or unassign device.\\
+\texttt{/api/alerts} & GET & List clinical alerts.\\
+\texttt{/api/alerts/\{alert\_id\}/resolve} & PATCH & Resolve alert.\\
+\texttt{/api/ai/models} & GET & List AI model metadata and availability.\\
+\bottomrule
+\end{longtable}
+
+\section{Sample Reading Payload}
+
+\begin{lstlisting}[caption={Sample ECG/PPG reading payload}]
+{
+  "device_id": "device_001",
+  "session_id": "session_123",
+  "timestamp": "2026-05-13T10:30:00Z",
+  "sampling_rate": 250,
+  "ecg": [0.12, 0.15, 0.18],
+  "ppg": [520, 525, 531],
+  "battery": 90,
+  "status": "active"
+}
+\end{lstlisting}
+
+\section{Installation Steps}
+
+\subsection{Backend}
+
+\begin{lstlisting}[caption={Backend setup}]
+cd Backend-bisho
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+alembic upgrade head
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+\end{lstlisting}
+
+\subsection{Flutter}
+
+\begin{lstlisting}[caption={Flutter setup}]
+flutter pub get
+flutter run --dart-define=BACKEND_BASE_URL=http://127.0.0.1:8000
+\end{lstlisting}
+
+\subsection{Hardware}
+
+\begin{enumerate}[leftmargin=*]
+    \item Install ESP32 board support in Arduino IDE.
+    \item Install the SparkFun MAX30105 library.
+    \item Copy \texttt{hardware/config.example.h} to \texttt{hardware/config.h}.
+    \item Configure Wi-Fi, backend URL, device ID, session ID, and pins.
+    \item Upload \texttt{hardware/ECG\_PPG\_HR\_SPO2/ECG\_PPG\_HR\_SPO2.ino}.
+\end{enumerate}
+
+\section{Environment Variables}
+
+\begin{table}[H]
+\centering
+\caption{Important backend and frontend configuration}
+\begin{tabular}{p{0.34\textwidth} p{0.5\textwidth}}
+\toprule
+\textbf{Variable} & \textbf{Purpose}\\
+\midrule
+\texttt{DATABASE\_URL} or database fields & PostgreSQL connection configuration.\\
+\texttt{SECRET\_KEY} & JWT signing secret.\\
+\texttt{GEMINI\_API\_KEY} & Optional medical chat API key.\\
+\texttt{DEVICE\_INGEST\_TOKEN} & Optional hardware upload token.\\
+\texttt{ECG\_MODEL\_DIR} & ECG classifier model directory.\\
+\texttt{MORPHOLOGY\_MODEL\_DIR} & Beat morphology model directory.\\
+\texttt{BP\_MODEL\_DIR} & Blood-pressure model directory.\\
+\texttt{AUTO\_ANALYZE\_ON\_UPLOAD} & Enables background analysis after upload.\\
+\texttt{BACKEND\_BASE\_URL} & Flutter backend URL passed with \texttt{--dart-define}.\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{User Manual}
+
+Patients should register, login, complete profile information, select or create a doctor, manage reminders and contacts, and open the heart monitoring page to review sessions. Doctors should login, manage patients, create appointments, review relevant records, and assign devices where authorized. Admin users can inspect dashboard statistics and wider user/device data.
+
+\section{Screenshot Placeholders}
+
+The repository contains image assets, but no complete thesis screenshot set was found. Add screenshots to the \texttt{figures} directory and reference them here.
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.75\textwidth}{\centering Placeholder for login and signup screens}}
+\caption{Authentication screens placeholder}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.75\textwidth}{\centering Placeholder for ECG/PPG session and analysis screens}}
+\caption{Heart monitoring screens placeholder}
+\end{figure}

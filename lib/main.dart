@@ -3,6 +3,8 @@ import 'package:medical/auth_pages/login.dart';
 import 'package:medical/home_pages/home.dart';
 import 'package:medical/home_pages/settings.dart';
 import 'package:medical/functions/settings_provider.dart';
+import 'package:medical/screens/doctor/doctor_home_screen.dart';
+import 'package:medical/services/api_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,11 +45,55 @@ class MyApp extends StatelessWidget {
                 ),
               );
             },
-            // home: DoctorHomeScreen(),
-            home: HomeView(),
+            home: const AuthGate(),
           );
         },
       ),
+    );
+  }
+}
+
+class AuthGate extends StatefulWidget {
+  const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  late final Future<Widget> _initialScreen = _resolveInitialScreen();
+
+  Future<Widget> _resolveInitialScreen() async {
+    final token = await ApiService.getToken();
+    if (token == null || token.isEmpty) {
+      return const LoginView();
+    }
+
+    try {
+      final profile = await ApiService.getUserProfile();
+      final role = profile['role']?.toString().toLowerCase();
+      if (role == 'doctor') {
+        return const DoctorHomeScreen();
+      }
+      return const HomeView();
+    } catch (_) {
+      await ApiService.clearToken();
+      return const LoginView();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Widget>(
+      future: _initialScreen,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return snapshot.data ?? const LoginView();
+      },
     );
   }
 }

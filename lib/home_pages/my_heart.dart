@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -14,8 +15,14 @@ class MyHeartPage extends StatefulWidget {
 
 class _MyHeartPageState extends State<MyHeartPage> {
   bool _loading = true;
+  bool _assigningDevice = false;
+  bool _deletingAllSessions = false;
   String? _error;
   List<MonitoringSession> _sessions = const [];
+  List<Device> _devices = const [];
+  List<dynamic> _patients = const [];
+  Map<String, dynamic>? _profile;
+  final Set<String> _deletingSessionIds = {};
 
   @override
   void initState() {
@@ -29,10 +36,28 @@ class _MyHeartPageState extends State<MyHeartPage> {
       _error = null;
     });
     try {
-      final sessions = await ApiService.getSessions();
+      final results = await Future.wait<dynamic>([
+        ApiService.getSessions(),
+        ApiService.getDevices(),
+        ApiService.getUserProfile().catchError((_) => <String, dynamic>{}),
+      ]);
+      final profile = Map<String, dynamic>.from(results[2] as Map);
+      final role = (profile['role'] ?? '').toString();
+      var patients = const <dynamic>[];
+      if (role == 'doctor') {
+        patients = await ApiService.getPatients();
+      } else if (role == 'admin') {
+        final users = await ApiService.getAllUsers();
+        patients = users
+            .where((user) => user is Map && user['role'] == 'patient')
+            .toList(growable: false);
+      }
       if (!mounted) return;
       setState(() {
-        _sessions = sessions;
+        _sessions = results[0] as List<MonitoringSession>;
+        _devices = results[1] as List<Device>;
+        _profile = profile.isEmpty ? null : profile;
+        _patients = patients;
         _loading = false;
       });
     } catch (e) {
@@ -41,6 +66,103 @@ class _MyHeartPageState extends State<MyHeartPage> {
         _error = e.toString();
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _assignDevice(String deviceId, int? patientId) async {
+    setState(() {
+      _assigningDevice = true;
+    });
+    try {
+      await ApiService.assignDevice(deviceId, patientId);
+      final devices = await ApiService.getDevices();
+      if (!mounted) return;
+      setState(() {
+        _devices = devices;
+        _assigningDevice = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Device assignment updated')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _assigningDevice = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
+  }
+
+  Future<void> _deleteSession(MonitoringSession session) async {
+    final confirmed = await _confirmDelete(
+      context,
+      title: 'Delete session?',
+      message:
+          'This removes ${session.sessionId}, its readings, AI analysis, and alerts.',
+      actionLabel: 'Delete',
+    );
+    if (!confirmed || !mounted) return;
+
+    setState(() {
+      _deletingSessionIds.add(session.sessionId);
+    });
+    try {
+      await ApiService.deleteSession(session.sessionId);
+      if (!mounted) return;
+      setState(() {
+        _sessions = _sessions
+            .where((item) => item.sessionId != session.sessionId)
+            .toList(growable: false);
+        _deletingSessionIds.remove(session.sessionId);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${session.sessionId} deleted')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _deletingSessionIds.remove(session.sessionId);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete session: $e')),
+      );
+    }
+  }
+
+  Future<void> _deleteAllSessions() async {
+    final confirmed = await _confirmDelete(
+      context,
+      title: 'Delete all sessions?',
+      message:
+          'This removes every ECG/PPG session, all readings, AI analysis, and alerts. Devices and users stay saved.',
+      actionLabel: 'Delete all',
+    );
+    if (!confirmed || !mounted) return;
+
+    setState(() {
+      _deletingAllSessions = true;
+    });
+    try {
+      await ApiService.deleteAllSessions();
+      if (!mounted) return;
+      setState(() {
+        _sessions = const [];
+        _deletingSessionIds.clear();
+        _deletingAllSessions = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('All sessions deleted')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _deletingAllSessions = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete sessions: $e')),
+      );
     }
   }
 
@@ -68,6 +190,18 @@ class _MyHeartPageState extends State<MyHeartPage> {
                   onPressed: _load,
                   icon: const Icon(Icons.refresh),
                 ),
+                if (!_loading && _sessions.isNotEmpty)
+                  IconButton(
+                    tooltip: 'Delete all sessions',
+                    onPressed: _deletingAllSessions ? null : _deleteAllSessions,
+                    icon: _deletingAllSessions
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.delete_sweep_outlined),
+                  ),
               ],
             ),
             const SizedBox(height: 8),
@@ -89,32 +223,271 @@ class _MyHeartPageState extends State<MyHeartPage> {
                 actionLabel: 'Retry',
                 onAction: _load,
               )
-            else if (_sessions.isEmpty)
-              const _StatePanel(
-                icon: Icons.timeline,
-                title: 'No sessions yet',
-                message: 'Upload ECG/PPG readings from the device to see them here.',
-              )
-            else
-              ..._sessions.map(
-                (session) => _SessionTile(
-                  session: session,
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => SessionDetailsPage(
-                          sessionId: session.sessionId,
-                        ),
-                      ),
-                    );
-                  },
-                ),
+            else ...[
+              _DeviceAssignmentPanel(
+                devices: _devices,
+                patients: _patients,
+                profile: _profile,
+                assigning: _assigningDevice,
+                onAssign: _assignDevice,
               ),
+              const SizedBox(height: 16),
+              if (_sessions.isEmpty)
+                const _StatePanel(
+                  icon: Icons.timeline,
+                  title: 'No sessions yet',
+                  message: 'Upload ECG/PPG readings from the device to see them here.',
+                )
+              else
+                ..._sessions.map(
+                  (session) => _SessionTile(
+                    session: session,
+                    deleting: _deletingSessionIds.contains(session.sessionId),
+                    onTap: () async {
+                      final deleted = await Navigator.of(context).push<bool>(
+                        MaterialPageRoute(
+                          builder: (_) => SessionDetailsPage(
+                            sessionId: session.sessionId,
+                          ),
+                        ),
+                      );
+                      if (deleted == true) {
+                        _load();
+                      }
+                    },
+                    onDelete: () => _deleteSession(session),
+                  ),
+                ),
+            ],
           ],
         ),
       ),
     );
   }
+}
+
+class _DeviceAssignmentPanel extends StatefulWidget {
+  final List<Device> devices;
+  final List<dynamic> patients;
+  final Map<String, dynamic>? profile;
+  final bool assigning;
+  final Future<void> Function(String deviceId, int? patientId) onAssign;
+
+  const _DeviceAssignmentPanel({
+    required this.devices,
+    required this.patients,
+    required this.profile,
+    required this.assigning,
+    required this.onAssign,
+  });
+
+  @override
+  State<_DeviceAssignmentPanel> createState() => _DeviceAssignmentPanelState();
+}
+
+class _DeviceAssignmentPanelState extends State<_DeviceAssignmentPanel> {
+  final Map<String, int?> _selectedPatients = {};
+
+  @override
+  Widget build(BuildContext context) {
+    final role = (widget.profile?['role'] ?? '').toString();
+    final currentPatientId = _intValue(widget.profile?['id']);
+    final canAssignPatients = role == 'doctor' || role == 'admin';
+    final canSelfAssign = role == 'patient' && currentPatientId != null;
+
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.sensors, color: AppColors.primary),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Devices',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (widget.devices.isEmpty)
+            const Text('No hardware devices have checked in yet.')
+          else
+            ...widget.devices.map(
+              (device) => _deviceRow(
+                device,
+                canAssignPatients: canAssignPatients,
+                canSelfAssign: canSelfAssign,
+                currentPatientId: currentPatientId,
+              ),
+            ),
+          if (!canAssignPatients && !canSelfAssign) ...[
+            const SizedBox(height: 10),
+            const _InfoLine(
+              icon: Icons.lock_outline,
+              text: 'Sign in as a patient, doctor, or admin to manage device assignment.',
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _deviceRow(
+    Device device, {
+    required bool canAssignPatients,
+    required bool canSelfAssign,
+    required int? currentPatientId,
+  }) {
+    final assignedLabel = _assignedLabel(device.patientId);
+    final patientOptions = _patientOptions();
+    final optionIds = patientOptions.map((patient) => patient.id).toSet();
+    final selected = _selectedPatients.containsKey(device.deviceId)
+        ? _selectedPatients[device.deviceId]
+        : optionIds.contains(device.patientId)
+            ? device.patientId
+            : null;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.025),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  device.label?.isNotEmpty == true ? device.label! : device.deviceId,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+              _StatusChip(label: device.patientId == null ? 'unassigned' : 'assigned'),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${device.deviceId}  |  $assignedLabel',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.black54, fontSize: 13),
+          ),
+          if (canAssignPatients) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButton<int>(
+                    value: selected,
+                    isExpanded: true,
+                    hint: const Text('Select patient'),
+                    items: patientOptions
+                        .map(
+                          (patient) => DropdownMenuItem<int>(
+                            value: patient.id,
+                            child: Text(
+                              patient.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: widget.assigning
+                        ? null
+                        : (value) {
+                            setState(() {
+                              _selectedPatients[device.deviceId] = value;
+                            });
+                          },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  tooltip: 'Assign device',
+                  onPressed: widget.assigning || selected == null || selected == device.patientId
+                      ? null
+                      : () => widget.onAssign(device.deviceId, selected),
+                  icon: const Icon(Icons.link),
+                ),
+                IconButton(
+                  tooltip: 'Unassign device',
+                  onPressed: widget.assigning || device.patientId == null
+                      ? null
+                      : () => widget.onAssign(device.deviceId, null),
+                  icon: const Icon(Icons.link_off),
+                ),
+              ],
+            ),
+          ] else if (canSelfAssign) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ElevatedButton.icon(
+                onPressed: widget.assigning || device.patientId == currentPatientId
+                    ? null
+                    : () => widget.onAssign(device.deviceId, currentPatientId),
+                icon: const Icon(Icons.link),
+                label: Text(
+                  device.patientId == currentPatientId ? 'Assigned to me' : 'Assign to me',
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _assignedLabel(int? patientId) {
+    if (patientId == null) return 'No patient assigned';
+    _PatientOption? match;
+    for (final patient in _patientOptions()) {
+      if (patient.id == patientId) {
+        match = patient;
+        break;
+      }
+    }
+    if (match != null) return 'Assigned to ${match.label}';
+    final currentPatientId = _intValue(widget.profile?['id']);
+    if (currentPatientId == patientId) return 'Assigned to you';
+    return 'Assigned to patient #$patientId';
+  }
+
+  List<_PatientOption> _patientOptions() {
+    return widget.patients
+        .whereType<Map>()
+        .map((patient) => Map<String, dynamic>.from(patient))
+        .map((patient) {
+          final id = _intValue(patient['id']);
+          if (id == null) return null;
+          final name = (patient['name'] ??
+                  patient['username'] ??
+                  patient['email'] ??
+                  'Patient #$id')
+              .toString();
+          return _PatientOption(id: id, label: name);
+        })
+        .whereType<_PatientOption>()
+        .toList(growable: false);
+  }
+}
+
+class _PatientOption {
+  final int id;
+  final String label;
+
+  const _PatientOption({required this.id, required this.label});
 }
 
 class SessionDetailsPage extends StatefulWidget {
@@ -131,24 +504,41 @@ class _SessionDetailsPageState extends State<SessionDetailsPage> {
   List<RawReading> _readings = const [];
   List<AnalysisResult> _analysis = const [];
   bool _loading = true;
+  bool _refreshing = false;
   bool _analyzing = false;
+  bool _deleting = false;
   String? _error;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => _load(showLoading: false),
+    );
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load({bool showLoading = true}) async {
+    if (_refreshing || _deleting) return;
+    _refreshing = true;
+    if (showLoading) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final results = await Future.wait<dynamic>([
         ApiService.getSession(widget.sessionId),
-        ApiService.getSessionReadings(widget.sessionId, limit: 1000),
+        ApiService.getSessionReadings(widget.sessionId, limit: 2000),
         ApiService.getSessionAnalysis(widget.sessionId),
       ]);
       if (!mounted) return;
@@ -164,6 +554,8 @@ class _SessionDetailsPageState extends State<SessionDetailsPage> {
         _error = e.toString();
         _loading = false;
       });
+    } finally {
+      _refreshing = false;
     }
   }
 
@@ -188,6 +580,33 @@ class _SessionDetailsPageState extends State<SessionDetailsPage> {
     }
   }
 
+  Future<void> _deleteSession() async {
+    final confirmed = await _confirmDelete(
+      context,
+      title: 'Delete session?',
+      message:
+          'This removes ${widget.sessionId}, its readings, AI analysis, and alerts.',
+      actionLabel: 'Delete',
+    );
+    if (!confirmed || !mounted) return;
+
+    setState(() {
+      _deleting = true;
+      _error = null;
+    });
+    try {
+      await ApiService.deleteSession(widget.sessionId);
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _deleting = false;
+        _error = e.toString();
+      });
+    }
+  }
+
   List<double> get _ecg =>
       _readings.expand((reading) => reading.ecg).toList(growable: false);
 
@@ -197,19 +616,32 @@ class _SessionDetailsPageState extends State<SessionDetailsPage> {
   @override
   Widget build(BuildContext context) {
     final latestAnalysis = _analysis.isNotEmpty ? _analysis.first : null;
+    final captureIssue = _captureIssueForReadings(_readings);
+    final hasEcgIssue = _hasEcgIssueForReadings(_readings);
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.sessionId),
         actions: [
           IconButton(
             tooltip: 'Refresh',
-            onPressed: _load,
+            onPressed: _deleting ? null : () => _load(),
             icon: const Icon(Icons.refresh),
+          ),
+          IconButton(
+            tooltip: 'Delete session',
+            onPressed: _deleting ? null : _deleteSession,
+            icon: _deleting
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.delete_outline),
           ),
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _load,
+        onRefresh: () => _load(),
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
@@ -247,6 +679,8 @@ class _SessionDetailsPageState extends State<SessionDetailsPage> {
               _AnalysisSection(
                 analysis: latestAnalysis,
                 isAnalyzing: _analyzing,
+                captureIssue: captureIssue,
+                hasEcgIssue: hasEcgIssue,
                 onAnalyze: _runAnalysis,
               ),
               if (_error != null) ...[
@@ -263,9 +697,16 @@ class _SessionDetailsPageState extends State<SessionDetailsPage> {
 
 class _SessionTile extends StatelessWidget {
   final MonitoringSession session;
+  final bool deleting;
   final VoidCallback onTap;
+  final VoidCallback onDelete;
 
-  const _SessionTile({required this.session, required this.onTap});
+  const _SessionTile({
+    required this.session,
+    required this.deleting,
+    required this.onTap,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -288,7 +729,26 @@ class _SessionTile extends StatelessWidget {
         subtitle: Text(
           '${session.deviceId}  |  ${session.samplingRate} Hz  |  ${_formatDate(session.startedAt)}',
         ),
-        trailing: const Icon(Icons.chevron_right),
+        trailing: SizedBox(
+          width: 92,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              IconButton(
+                tooltip: 'Delete session',
+                onPressed: deleting ? null : onDelete,
+                icon: deleting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.delete_outline),
+              ),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -307,6 +767,11 @@ class _SessionHeader extends StatelessWidget {
       (sum, reading) => sum + reading.sampleCount,
     );
     final latestBattery = readings.isEmpty ? null : readings.last.battery;
+    final latestMetadata = readings.isEmpty ? const <String, dynamic>{} : readings.last.metadataJson;
+    final latestSpo2 = latestMetadata['spo2_percent'];
+    final fingerDetected = _boolValue(latestMetadata['finger_detected']);
+    final captureIssue = _captureIssueForReadings(readings);
+    final hasEcgIssue = _hasEcgIssueForReadings(readings);
     return _Panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -337,8 +802,31 @@ class _SessionHeader extends StatelessWidget {
                 label: 'Battery',
                 value: latestBattery == null ? '--' : '$latestBattery%',
               ),
+              _SmallMetric(
+                label: 'SpO2',
+                value: latestSpo2 is num ? '${latestSpo2.toStringAsFixed(1)}%' : '--',
+              ),
+              _SmallMetric(
+                label: 'Finger',
+                value: fingerDetected == null
+                    ? '--'
+                    : fingerDetected
+                        ? 'Detected'
+                        : 'Not detected',
+              ),
             ],
           ),
+          if (captureIssue != null) ...[
+            const SizedBox(height: 12),
+            _InlineError(message: captureIssue),
+          ],
+          if (captureIssue == null && hasEcgIssue) ...[
+            const SizedBox(height: 12),
+            const _InlineError(
+              message:
+                  'ECG leads are off. PPG results can still be shown, but ECG and arrhythmia results are not reliable.',
+            ),
+          ],
         ],
       ),
     );
@@ -348,16 +836,21 @@ class _SessionHeader extends StatelessWidget {
 class _AnalysisSection extends StatelessWidget {
   final AnalysisResult? analysis;
   final bool isAnalyzing;
+  final String? captureIssue;
+  final bool hasEcgIssue;
   final VoidCallback onAnalyze;
 
   const _AnalysisSection({
     required this.analysis,
     required this.isAnalyzing,
+    required this.captureIssue,
+    required this.hasEcgIssue,
     required this.onAnalyze,
   });
 
   @override
   Widget build(BuildContext context) {
+    final canAnalyze = !isAnalyzing && captureIssue == null;
     if (analysis == null) {
       return _Panel(
         child: Column(
@@ -368,10 +861,13 @@ class _AnalysisSection extends StatelessWidget {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 8),
-            const Text('No analysis result has been stored for this session yet.'),
+            if (captureIssue == null)
+              const Text('No analysis result has been stored for this session yet.')
+            else
+              _InlineError(message: captureIssue!),
             const SizedBox(height: 14),
             ElevatedButton.icon(
-              onPressed: isAnalyzing ? null : onAnalyze,
+              onPressed: canAnalyze ? onAnalyze : null,
               icon: isAnalyzing
                   ? const SizedBox(
                       width: 16,
@@ -387,12 +883,17 @@ class _AnalysisSection extends StatelessWidget {
     }
 
     final metrics = analysis!.metrics;
-    final risk = Map<String, dynamic>.from(
-      (analysis!.predictions['arrhythmia_risk'] as Map?) ?? const {},
+    final summary = Map<String, dynamic>.from(
+      (analysis!.predictions['summary'] as Map?) ?? const {},
     );
-    final stress = Map<String, dynamic>.from(
-      (analysis!.predictions['stress_fatigue_indicator'] as Map?) ?? const {},
+    final models = Map<String, dynamic>.from(
+      (analysis!.predictions['models'] as Map?) ?? const {},
     );
+    final bloodPressure = Map<String, dynamic>.from(
+      (models['blood_pressure_vital_meta'] as Map?) ?? const {},
+    );
+    final ppgRateReason = metrics['ppg_rate_reason']?.toString();
+    final bpReason = bloodPressure['reason']?.toString();
 
     return _Panel(
       child: Column(
@@ -406,49 +907,112 @@ class _AnalysisSection extends StatelessWidget {
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                 ),
               ),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => AiModelResultsPage(analysis: analysis!),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.analytics_outlined),
+                label: const Text('Results'),
+              ),
+              const SizedBox(width: 8),
               ElevatedButton.icon(
-                onPressed: isAnalyzing ? null : onAnalyze,
+                onPressed: canAnalyze ? onAnalyze : null,
                 icon: const Icon(Icons.refresh),
                 label: Text(isAnalyzing ? 'Running' : 'Re-run'),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _SmallMetric(
-                label: 'Heart rate',
-                value: _metric(metrics['heart_rate_bpm'], suffix: ' bpm'),
+          if (captureIssue != null) ...[
+            _InlineError(message: captureIssue!),
+            const SizedBox(height: 12),
+            const Text(
+              'PPG values are hidden until the finger sensor has valid contact.',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ] else ...[
+            if (hasEcgIssue) ...[
+              const _InlineError(
+                message:
+                    'ECG leads are off. Showing PPG-related results only.',
               ),
-              _SmallMetric(
-                label: 'HRV RMSSD',
-                value: _metric(metrics['hrv_rmssd_ms'], suffix: ' ms'),
+              const SizedBox(height: 12),
+            ],
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (!hasEcgIssue) ...[
+                  _SmallMetric(
+                    label: 'Heart rate',
+                    value: _metric(metrics['heart_rate_bpm'], suffix: ' bpm'),
+                  ),
+                  _SmallMetric(
+                    label: 'HRV RMSSD',
+                    value: _metric(metrics['hrv_rmssd_ms'], suffix: ' ms'),
+                  ),
+                ],
+                _SmallMetric(
+                  label: 'PPG rate',
+                  value: _metric(metrics['ppg_rate_bpm'], suffix: ' bpm'),
+                ),
+                _SmallMetric(
+                  label: 'SpO2',
+                  value: _metric(metrics['spo2_percent'], suffix: '%'),
+                ),
+                _SmallMetric(
+                  label: 'Perfusion',
+                  value: _metric(metrics['perfusion_index_percent'], suffix: '%'),
+                ),
+                _SmallMetric(
+                  label: 'Systolic',
+                  value: _metric(bloodPressure['systolic_mmHg'], suffix: ' mmHg'),
+                ),
+                _SmallMetric(
+                  label: 'Diastolic',
+                  value: _metric(bloodPressure['diastolic_mmHg'], suffix: ' mmHg'),
+                ),
+              ],
+            ),
+            if (ppgRateReason != null || bpReason != null) ...[
+              const SizedBox(height: 12),
+              if (ppgRateReason != null)
+                _InfoLine(
+                  icon: Icons.sensors,
+                  text: ppgRateReason,
+                ),
+              if (bpReason != null)
+                _InfoLine(
+                  icon: Icons.monitor_heart_outlined,
+                  text: bpReason,
+                ),
+            ],
+            const SizedBox(height: 14),
+            if (!hasEcgIssue) ...[
+              _ConclusionRow(
+                label: 'Arrhythmia risk',
+                value: (summary['arrhythmia_risk'] ?? 'unknown').toString(),
               ),
-              _SmallMetric(
-                label: 'PPG rate',
-                value: _metric(metrics['ppg_rate_bpm'], suffix: ' bpm'),
-              ),
-              _SmallMetric(
-                label: 'Perfusion',
-                value: _metric(metrics['perfusion_index_percent'], suffix: '%'),
+              _ConclusionRow(
+                label: 'Morphology model',
+                value: (summary['morphology_status'] ?? 'unknown').toString(),
               ),
             ],
-          ),
-          const SizedBox(height: 14),
-          _ConclusionRow(
-            label: 'Arrhythmia risk',
-            value: (risk['level'] ?? 'unknown').toString(),
-          ),
-          _ConclusionRow(
-            label: 'Stress/fatigue',
-            value: (stress['level'] ?? 'unknown').toString(),
-          ),
-          const Divider(height: 24),
-          _QualityView(quality: analysis!.signalQuality),
-          const SizedBox(height: 14),
-          _AlertsView(alerts: analysis!.alerts),
+            _ConclusionRow(
+              label: 'Blood pressure model',
+              value: (summary['blood_pressure_status'] ?? 'unknown').toString(),
+            ),
+            const Divider(height: 24),
+            _QualityView(quality: analysis!.signalQuality),
+            if (!hasEcgIssue) ...[
+              const SizedBox(height: 14),
+              _AlertsView(alerts: analysis!.alerts),
+            ],
+          ],
           const SizedBox(height: 14),
           Text(
             analysis!.disclaimer,
@@ -457,6 +1021,378 @@ class _AnalysisSection extends StatelessWidget {
               color: Colors.black54,
               fontWeight: FontWeight.w600,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class AiModelResultsPage extends StatelessWidget {
+  final AnalysisResult analysis;
+
+  const AiModelResultsPage({super.key, required this.analysis});
+
+  @override
+  Widget build(BuildContext context) {
+    final predictions = Map<String, dynamic>.from(analysis.predictions);
+    final models = Map<String, dynamic>.from(
+      (predictions['models'] as Map?) ?? const {},
+    );
+    final summary = Map<String, dynamic>.from(
+      (predictions['summary'] as Map?) ?? const {},
+    );
+    final metrics = analysis.metrics;
+    final ecg = Map<String, dynamic>.from(
+      (models['ecg_arrhythmia_v31'] as Map?) ?? const {},
+    );
+    final morphology = Map<String, dynamic>.from(
+      (models['morphology_heartbeat_v1'] as Map?) ?? const {},
+    );
+    final bloodPressure = Map<String, dynamic>.from(
+      (models['blood_pressure_vital_meta'] as Map?) ?? const {},
+    );
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('AI Model Results')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _Panel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.psychology_alt_outlined, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Multi-model analysis',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    _StatusChip(label: analysis.status),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _SmallMetric(label: 'Session', value: analysis.sessionId),
+                    _SmallMetric(label: 'Pipeline', value: analysis.modelVersion),
+                    _SmallMetric(label: 'Created', value: _formatDate(analysis.createdAt)),
+                    _SmallMetric(
+                      label: 'Arrhythmia risk',
+                      value: (summary['arrhythmia_risk'] ?? 'unknown').toString(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  analysis.disclaimer,
+                  style: const TextStyle(
+                    color: Colors.black54,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _Panel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Processed Metrics',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _SmallMetric(
+                      label: 'Heart rate',
+                      value: _metric(metrics['heart_rate_bpm'], suffix: ' bpm'),
+                    ),
+                    _SmallMetric(
+                      label: 'PPG rate',
+                      value: _metric(metrics['ppg_rate_bpm'], suffix: ' bpm'),
+                    ),
+                    _SmallMetric(
+                      label: 'SpO2',
+                      value: _metric(metrics['spo2_percent'], suffix: '%'),
+                    ),
+                    _SmallMetric(
+                      label: 'Perfusion',
+                      value: _metric(metrics['perfusion_index_percent'], suffix: '%'),
+                    ),
+                    _SmallMetric(
+                      label: 'ECG samples',
+                      value: (metrics['ai_input'] is Map)
+                          ? '${(metrics['ai_input'] as Map)['ecg_samples'] ?? '--'}'
+                          : '--',
+                    ),
+                    _SmallMetric(
+                      label: 'PPG samples',
+                      value: (metrics['ai_input'] is Map)
+                          ? '${(metrics['ai_input'] as Map)['ppg_samples'] ?? '--'}'
+                          : '--',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _ModelResultPanel(
+            title: 'ECG Arrhythmia Model',
+            subtitle: 'Record-level ECG classifier',
+            model: ecg,
+            unavailableIcon: Icons.monitor_heart_outlined,
+            child: _ClassResultList(model: ecg),
+          ),
+          const SizedBox(height: 12),
+          _ModelResultPanel(
+            title: 'Heartbeat Morphology Model',
+            subtitle: 'Beat-level ECG morphology classifier',
+            model: morphology,
+            unavailableIcon: Icons.timeline,
+            child: _ClassResultList(model: morphology),
+          ),
+          const SizedBox(height: 12),
+          _BloodPressureResultPanel(model: bloodPressure),
+          const SizedBox(height: 12),
+          _Panel(child: _QualityView(quality: analysis.signalQuality)),
+          if (analysis.alerts.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _Panel(child: _AlertsView(alerts: analysis.alerts)),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ModelResultPanel extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final Map<String, dynamic> model;
+  final IconData unavailableIcon;
+  final Widget child;
+
+  const _ModelResultPanel({
+    required this.title,
+    required this.subtitle,
+    required this.model,
+    required this.unavailableIcon,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final status = (model['status'] ?? 'unknown').toString();
+    final available = model['model_available'] == true;
+    final reason = model['reason']?.toString();
+    final topClass = Map<String, dynamic>.from(
+      (model['top_class'] as Map?) ?? const {},
+    );
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(available ? Icons.check_circle_outline : unavailableIcon,
+                  color: available ? const Color(0xFF2E7D32) : const Color(0xFFE65100)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                    Text(subtitle, style: const TextStyle(color: Colors.black54)),
+                  ],
+                ),
+              ),
+              _StatusChip(label: status),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (reason != null) ...[
+            _InfoLine(icon: Icons.info_outline, text: reason),
+            const SizedBox(height: 8),
+          ],
+          if (topClass.isNotEmpty) ...[
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _SmallMetric(label: 'Top class', value: '${topClass['code'] ?? '--'}'),
+                _SmallMetric(
+                  label: 'Probability',
+                  value: _probabilityText(topClass['probability']),
+                ),
+                _SmallMetric(
+                  label: 'Confidence',
+                  value: _probabilityText(topClass['confidence']),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+          ],
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _ClassResultList extends StatelessWidget {
+  final Map<String, dynamic> model;
+
+  const _ClassResultList({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final classes = Map<String, dynamic>.from(
+      (model['classes'] as Map?) ?? const {},
+    );
+    if (classes.isEmpty) {
+      return const _InfoLine(
+        icon: Icons.hourglass_empty,
+        text: 'No class probabilities were returned for this model.',
+      );
+    }
+    final entries = classes.entries.toList()
+      ..sort((a, b) {
+        final ap = _asDouble((a.value as Map?)?['probability']) ?? 0;
+        final bp = _asDouble((b.value as Map?)?['probability']) ?? 0;
+        return bp.compareTo(ap);
+      });
+    return Column(
+      children: entries.map((entry) {
+        final values = Map<String, dynamic>.from((entry.value as Map?) ?? const {});
+        final probability = (_asDouble(values['probability']) ?? 0).clamp(0.0, 1.0);
+        final detected = values['detected'] == true;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      entry.key,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  Text(
+                    detected ? 'detected' : 'not detected',
+                    style: TextStyle(
+                      color: detected ? const Color(0xFFC62828) : Colors.black54,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              LinearProgressIndicator(
+                value: probability,
+                minHeight: 8,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Probability ${_probabilityText(values['probability'])}  |  Confidence ${_probabilityText(values['confidence'])}',
+                style: const TextStyle(fontSize: 12, color: Colors.black54),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _BloodPressureResultPanel extends StatelessWidget {
+  final Map<String, dynamic> model;
+
+  const _BloodPressureResultPanel({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final status = (model['status'] ?? 'unknown').toString();
+    final available = model['model_available'] == true;
+    final reason = model['reason']?.toString();
+    final meta = Map<String, dynamic>.from(
+      (model['meta_vector'] as Map?) ?? const {},
+    );
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                available ? Icons.check_circle_outline : Icons.bloodtype_outlined,
+                color: available ? const Color(0xFF2E7D32) : const Color(0xFFE65100),
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Blood Pressure Model',
+                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                    ),
+                    Text(
+                      'PPG sequence plus patient weight, height, and BMI',
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                  ],
+                ),
+              ),
+              _StatusChip(label: status),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (reason != null) ...[
+            _InfoLine(icon: Icons.info_outline, text: reason),
+            const SizedBox(height: 8),
+          ],
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _SmallMetric(
+                label: 'Systolic',
+                value: _metric(model['systolic_mmHg'], suffix: ' mmHg'),
+              ),
+              _SmallMetric(
+                label: 'Diastolic',
+                value: _metric(model['diastolic_mmHg'], suffix: ' mmHg'),
+              ),
+              _SmallMetric(
+                label: 'Confidence',
+                value: _probabilityText(model['confidence']),
+              ),
+              _SmallMetric(
+                label: 'Weight',
+                value: _metric(meta['weight'], suffix: ' kg'),
+              ),
+              _SmallMetric(
+                label: 'Height',
+                value: _metric(meta['height'], suffix: ' cm'),
+              ),
+              _SmallMetric(label: 'BMI', value: _metric(meta['bmi'], suffix: '')),
+            ],
           ),
         ],
       ),
@@ -829,10 +1765,87 @@ class _InlineError extends StatelessWidget {
   }
 }
 
+Future<bool> _confirmDelete(
+  BuildContext context, {
+  required String title,
+  required String message,
+  required String actionLabel,
+}) async {
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.icon(
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFFC62828),
+          ),
+          onPressed: () => Navigator.of(context).pop(true),
+          icon: const Icon(Icons.delete_outline),
+          label: Text(actionLabel),
+        ),
+      ],
+    ),
+  );
+  return result ?? false;
+}
+
 String _metric(dynamic value, {required String suffix}) {
   if (value == null) return '--';
   if (value is num) return '${value.toStringAsFixed(value % 1 == 0 ? 0 : 1)}$suffix';
   return '$value$suffix';
+}
+
+double? _asDouble(dynamic value) {
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value);
+  return null;
+}
+
+String _probabilityText(dynamic value) {
+  final numeric = _asDouble(value);
+  if (numeric == null) return '--';
+  return '${(numeric * 100).toStringAsFixed(1)}%';
+}
+
+bool? _boolValue(dynamic value) {
+  if (value is bool) return value;
+  if (value is String) {
+    final normalized = value.toLowerCase().trim();
+    if (normalized == 'true') return true;
+    if (normalized == 'false') return false;
+  }
+  return null;
+}
+
+int? _intValue(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value);
+  return null;
+}
+
+String? _captureIssueForReadings(List<RawReading> readings) {
+  if (readings.isEmpty) return null;
+  final latest = readings.last;
+  final fingerDetected = _boolValue(latest.metadataJson['finger_detected']);
+  final ppgSensorReady = _boolValue(latest.metadataJson['ppg_sensor_ready']);
+  if (latest.status == 'ppg_sensor_off' || ppgSensorReady == false) {
+    return 'PPG sensor is offline. Check MAX30105 power, ground, SDA, and SCL wiring.';
+  }
+  if (latest.status == 'no_finger' || fingerDetected == false) {
+    return 'Finger not detected on the PPG sensor. Place your finger over the sensor and keep still.';
+  }
+  return null;
+}
+
+bool _hasEcgIssueForReadings(List<RawReading> readings) {
+  return readings.isNotEmpty && readings.last.status == 'leads_off';
 }
 
 String _formatDate(DateTime value) {

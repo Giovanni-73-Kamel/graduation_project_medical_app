@@ -1,0 +1,25 @@
+\chapter{Problem Statement}
+
+Healthcare monitoring applications often face a disconnect between data collection and practical clinical use. Raw ECG and PPG measurements may be produced by wearable or embedded devices, but the readings must be transmitted, validated, persisted, analyzed, and displayed before they can support patient or doctor decisions. Without an integrated system, users may be left with isolated hardware readings, inconsistent records, or charts without context.
+
+The problem addressed by Medical App V3 is the need for a unified medical monitoring platform that connects patient management, doctor workflows, and ECG/PPG signal monitoring. The project must support ordinary application functions such as login, profile management, appointments, contacts, and reminders, while also handling specialized data from hardware sensors. The software solution must therefore manage both administrative medical information and time-series physiological data.
+
+\section{Current Challenges}
+
+The source code indicates several practical challenges that the project attempts to solve:
+
+\begin{itemize}[leftmargin=*]
+    \item Sensor readings can be invalid because of missing finger contact, disconnected ECG leads, PPG sensor failure, or low-information signals.
+    \item Large raw signal payloads can increase storage costs and response sizes unless capped or compacted.
+    \item AI model dependencies may be unavailable in lightweight development or deployment environments.
+    \item Different users require different access rules: patients should see their own information, doctors should manage assigned patients, and admins require broader visibility.
+    \item Medical AI outputs must be presented as decision support rather than final diagnosis.
+\end{itemize}
+
+\section{Need for a Software Solution}
+
+A software solution is needed because hardware alone cannot provide authentication, long-term storage, clinical context, or doctor-patient workflows. Similarly, a mobile application alone cannot produce reliable signal analysis without a backend capable of receiving readings, validating input, storing data, and running signal-processing services. Medical App V3 fills this gap by connecting the sensing device, backend, database, AI services, and Flutter application into a coherent prototype.
+
+\section{Project Gap}
+
+The gap filled by the project is an academic prototype for medical IoT monitoring that is broader than a simple CRUD application and more user-oriented than a signal-processing script. It demonstrates how physiological data can move from an ESP32 device into persistent storage, through a signal-analysis pipeline, and finally into mobile views designed for patients, doctors, and administrators.

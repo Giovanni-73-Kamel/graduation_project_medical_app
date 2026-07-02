@@ -1,0 +1,53 @@
+\chapter{Testing and Evaluation}
+
+\section{Testing Strategy}
+
+The repository contains backend tests under \texttt{Backend-bisho/tests} and Flutter tests under \texttt{test}. The backend tests use FastAPI's \texttt{TestClient}, SQLite in-memory databases, dependency overrides, and seeded test data. The Flutter test validates parsing of backend JSON models.
+
+\section{Implemented Automated Tests}
+
+\begin{longtable}{p{0.22\textwidth} p{0.5\textwidth} p{0.18\textwidth}}
+\caption{Detected automated tests}\\
+\toprule
+\textbf{Test area} & \textbf{Examples} & \textbf{Expected result}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Test area} & \textbf{Examples} & \textbf{Expected result}\\
+\midrule
+\endhead
+Signal processing & Peak detection, metrics, signal quality, flat normalization & Correct peaks, metrics, and stable zero output for flat signals.\\
+ECG/PPG API & Session creation, reading upload, analysis, invalid payload rejection & Valid readings are stored and analyzed; invalid readings are rejected.\\
+Sensor states & No finger, PPG off, leads off, large payload cap & Commands and storage compaction behave as expected.\\
+AI integration & Model registry, normalized outputs, degraded short ECG, BP metadata requirements & Models are listed and degraded states are structured.\\
+User endpoints & Profile patch and doctor assignment & User profile updates persist correctly.\\
+Flutter models & Session and raw reading parsing & JSON fields map to Dart model properties.\\
+\bottomrule
+\end{longtable}
+
+\section{Manual Test Cases}
+
+\begin{longtable}{p{0.12\textwidth} p{0.32\textwidth} p{0.42\textwidth}}
+\caption{Suggested manual test cases}\\
+\toprule
+\textbf{ID} & \textbf{Scenario} & \textbf{Expected result}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{ID} & \textbf{Scenario} & \textbf{Expected result}\\
+\midrule
+\endhead
+MT1 & Register a patient account and login & Patient is routed to the patient home screen.\\
+MT2 & Register or login as doctor & Doctor is routed to the doctor home screen.\\
+MT3 & Create an appointment for a patient & Appointment appears in the appointment list.\\
+MT4 & Upload sample reading payload & Backend creates device/session/reading and returns commands.\\
+MT5 & Open My Heart page & Sessions and devices load with refresh and error states.\\
+MT6 & Run analysis on valid session & Metrics, signal quality, predictions, alerts, and disclaimer appear.\\
+MT7 & Upload no-finger payload & Backend drops invalid PPG and prevents analysis until contact is valid.\\
+MT8 & Assign device as doctor & Device patient assignment changes only when authorization rules allow it.\\
+\bottomrule
+\end{longtable}
+
+\section{Evaluation}
+
+The tests demonstrate that the core monitoring pipeline can accept readings, reject invalid payloads, process signal metrics, preserve storage metadata, and handle model availability. The tests also evaluate safety-relevant conditions such as missing finger contact, PPG sensor failure, ECG leads-off state, and large payload capping. No formal usability study, performance benchmark, or clinical validation dataset result was found in the repository, so these remain limitations.

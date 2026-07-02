@@ -161,39 +161,43 @@ def update_me(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    db_user = db.query(models.User).filter(models.User.id == current_user.id).first()
+    if db_user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
     if payload.email is not None:
         normalized_email = _normalize_email(payload.email)
         if normalized_email is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email is invalid")
-        _ensure_unique_email(db, normalized_email, current_user.id)
-        current_user.email = normalized_email
+        _ensure_unique_email(db, normalized_email, db_user.id)
+        db_user.email = normalized_email
 
     if payload.username is not None:
-        current_user.username = payload.username
+        db_user.username = payload.username
     if payload.password is not None:
-        current_user.password = utils.hash(payload.password)
+        db_user.password = utils.hash(payload.password)
     if payload.phone_number is not None:
-        current_user.phone_number = payload.phone_number
+        db_user.phone_number = payload.phone_number
     if payload.date_of_birth is not None:
-        current_user.date_of_birth = payload.date_of_birth
+        db_user.date_of_birth = payload.date_of_birth
     if payload.age is not None:
-        current_user.age = payload.age
+        db_user.age = payload.age
     if payload.height is not None:
-        current_user.height = payload.height
+        db_user.height = payload.height
     if payload.weight is not None:
-        current_user.weight = payload.weight
-    if payload.role is not None and payload.role.lower().strip() != current_user.role:
+        db_user.weight = payload.weight
+    if payload.role is not None and payload.role.lower().strip() != db_user.role:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Role changes are not allowed here")
 
     if payload.doctor_id is not None:
         doctor = db.query(models.User).filter(models.User.id == payload.doctor_id).first()
         if doctor is None or doctor.role != "doctor":
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Doctor not found")
-        current_user.doc_id = doctor.id
+        db_user.doc_id = doctor.id
 
     db.commit()
-    db.refresh(current_user)
-    return current_user
+    db.refresh(db_user)
+    return db_user
 
 
 @router.get("/users/{id}", response_model=schemas.UserOut)

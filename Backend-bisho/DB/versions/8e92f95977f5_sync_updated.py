@@ -28,6 +28,8 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('patient_id')
     )
     op.drop_constraint(op.f('contacts_phone_key'), 'contacts', type_='unique')
+    op.drop_constraint(op.f('users_emergency_id_fkey'), 'users', type_='foreignkey')
+    op.drop_constraint(op.f('users_doctor_id_fkey'), 'users', type_='foreignkey')
     op.add_column('doctors', sa.Column('doctor_id', sa.Integer(), nullable=False))
     op.add_column('doctors', sa.Column('user_id', sa.Integer(), nullable=True))
     op.drop_constraint(op.f('doctors_email_key'), 'doctors', type_='unique')
@@ -42,8 +44,6 @@ def upgrade() -> None:
     op.alter_column('reminders', 'notes',
                existing_type=sa.VARCHAR(),
                nullable=True)
-    op.drop_constraint(op.f('users_emergency_id_fkey'), 'users', type_='foreignkey')
-    op.drop_constraint(op.f('users_doctor_id_fkey'), 'users', type_='foreignkey')
     op.drop_column('users', 'doctor_id')
     op.drop_column('users', 'emergency_id')
     # ### end Alembic commands ###

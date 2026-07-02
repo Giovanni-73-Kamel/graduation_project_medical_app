@@ -1,0 +1,29 @@
+\chapter{Project Objectives}
+
+\section{General Objective}
+
+The general objective of Medical App V3 is to design and implement a full-stack medical monitoring system that supports patient and doctor workflows while receiving, storing, analyzing, and visualizing ECG/PPG readings from a connected hardware device.
+
+\section{Specific Objectives}
+
+\begin{enumerate}[leftmargin=*]
+    \item Build a Flutter application with authentication, role-aware navigation, profile screens, patient screens, doctor screens, appointments, contacts, reminders, and ECG/PPG monitoring views.
+    \item Implement a FastAPI backend that exposes REST APIs for user management, clinical workflows, catalogs, administration, device ingestion, session analysis, and alerts.
+    \item Design a PostgreSQL database schema using SQLAlchemy models and Alembic migrations.
+    \item Implement ESP32 firmware that reads ECG and PPG signals, detects sensor states, estimates SpO2 metadata, and uploads readings to the backend.
+    \item Integrate deterministic signal-processing algorithms for peak detection, heart rate, PPG rate, HRV, perfusion index, signal quality, and alert generation.
+    \item Integrate optional AI adapters for ECG record classification, beat-level morphology classification, and PPG-based blood-pressure estimation.
+    \item Provide tests for backend endpoints, signal processing, AI integration behavior, and Flutter model parsing.
+\end{enumerate}
+
+\section{Functional Goals}
+
+The functional goals include registration, login, JWT token storage, profile editing, doctor selection, patient management, appointment scheduling, reminders, contacts, medical records, prescriptions, lab results, device registration, device assignment, session browsing, readings retrieval, analysis execution, and alert handling.
+
+\section{Technical Goals}
+
+The technical goals include modular backend routing, validated request models, relational persistence, role-based authorization, configurable environment variables, hardware token support for device ingestion, graceful AI fallback, and mobile API abstraction through a centralized Flutter service class.
+
+\section{Academic Goals}
+
+The academic goals are to demonstrate the ability to analyze a real problem domain, design a multi-layer architecture, implement a working prototype, evaluate it through tests and manual scenarios, and document its limitations responsibly.

@@ -65,6 +65,8 @@ def test_patch_users_me_updates_profile_and_doctor_assignment():
             "/users/me",
             json={
                 "phone_number": "777",
+                "height": "175",
+                "weight": "70",
                 "doctor_id": doctor.id,
             },
         )
@@ -72,10 +74,14 @@ def test_patch_users_me_updates_profile_and_doctor_assignment():
         assert response.status_code == 200
         body = response.json()
         assert body["phone_number"] == "777"
+        assert body["height"] == "175"
+        assert body["weight"] == "70"
 
         db = session_factory()
         updated_patient = db.query(models.User).filter(models.User.id == patient.id).first()
         assert updated_patient.doc_id == doctor.id
+        assert updated_patient.height == "175"
+        assert updated_patient.weight == "70"
         db.close()
     finally:
         app.dependency_overrides.clear()

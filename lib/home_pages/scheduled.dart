@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:medical/functions/app_colors.dart';
 import 'package:medical/functions/custom_text.dart';
-import 'package:medical/functions/txtfield.dart';
+import 'package:medical/functions/txtField.dart';
 import 'package:medical/services/api_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'
     as fln;

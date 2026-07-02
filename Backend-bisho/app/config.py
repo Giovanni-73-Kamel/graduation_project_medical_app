@@ -28,8 +28,10 @@ class Settings(BaseSettings):
     morphology_model_dir: str = "../AI models/Morphological Heartbeat Arrhythmia Classifier"
     bp_model_dir: str = "../AI models/BP_Model_Vital_15_Meta"
     ecg_model_enabled: bool = True
-    auto_analyze_on_upload: bool = True
+    auto_analyze_on_upload: bool = False
     auto_analyze_min_samples: int = 100
+    compact_invalid_reading_signals: bool = True
+    max_raw_signal_samples_per_reading: int = 1250
 
     class Config:
         env_file = ".env"

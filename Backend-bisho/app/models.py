@@ -9,6 +9,7 @@ from sqlalchemy import (
     JSON,
     String,
     UniqueConstraint,
+    func,
     text,
 )
 from app.database import Base
@@ -22,7 +23,7 @@ class User(Base):
     email=Column(String, nullable=False, unique=True)
     password = Column(String, nullable=True)        #to permit non-users doctors & patients
     role=Column(String, nullable=False)
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     phone_number=Column(String, nullable=False)
     date_of_birth=Column(String, nullable=True)
     age    = Column(String, nullable=True)
@@ -44,7 +45,7 @@ class Post(Base):
     title = Column(String,nullable=False)
     content = Column(String,nullable=False)
     published = Column(Boolean, server_default='TRUE',nullable=False)
-    created_at = Column(TIMESTAMP(timezone=True),nullable=False, server_default=text('now()'))
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     owner_id = Column(Integer, ForeignKey("users.id",ondelete="CASCADE"),nullable=False)
     owner = relationship("User")
 
@@ -74,7 +75,7 @@ class Contact(Base) :
     type = Column(String,nullable=False)
     phone = Column(String,nullable=False)
     email = Column(String,nullable=False)
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     owner_id = Column(Integer, ForeignKey("users.id",ondelete="CASCADE"),nullable=False)
 
 class Reminder(Base) :
@@ -88,7 +89,7 @@ class Reminder(Base) :
     time_minute = Column(Integer,nullable=False)
     frequency = Column(String,nullable=False) 
     notes = Column(String,nullable=True)    
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     owner_id = Column(Integer, ForeignKey("users.id",ondelete="CASCADE"),nullable=False)
 
 class Appointment(Base):
@@ -102,7 +103,81 @@ class Appointment(Base):
     time_hour = Column(Integer,nullable=False)
     time_minute = Column(Integer,nullable=False)
     notes = Column(String,nullable=True)    
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+
+
+class MedicalRecord(Base):
+    __tablename__ = "medical_records"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    patient_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    doctor_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    title = Column(String, nullable=False)
+    diagnosis = Column(String, nullable=True)
+    notes = Column(String, nullable=True)
+    metadata_json = Column(JSON, nullable=False, server_default=text("'{}'"))
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+
+    patient = relationship("User", foreign_keys=[patient_id])
+    doctor = relationship("User", foreign_keys=[doctor_id])
+
+
+class Prescription(Base):
+    __tablename__ = "prescriptions"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    appointment_id = Column(Integer, ForeignKey("appointments.id", ondelete="SET NULL"), nullable=True)
+    patient_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    doctor_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    medication_name = Column(String, nullable=False)
+    dosage = Column(String, nullable=True)
+    frequency = Column(String, nullable=True)
+    instructions = Column(String, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+
+    appointment = relationship("Appointment")
+    patient = relationship("User", foreign_keys=[patient_id])
+    doctor = relationship("User", foreign_keys=[doctor_id])
+
+
+class LabResult(Base):
+    __tablename__ = "lab_results"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    appointment_id = Column(Integer, ForeignKey("appointments.id", ondelete="SET NULL"), nullable=True)
+    patient_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    doctor_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    test_name = Column(String, nullable=False)
+    result_value = Column(String, nullable=True)
+    unit = Column(String, nullable=True)
+    reference_range = Column(String, nullable=True)
+    notes = Column(String, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+
+    appointment = relationship("Appointment")
+    patient = relationship("User", foreign_keys=[patient_id])
+    doctor = relationship("User", foreign_keys=[doctor_id])
+
+
+class Clinic(Base):
+    __tablename__ = "clinics"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    name = Column(String, nullable=False)
+    address = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    specialty = Column(String, nullable=True)
+    metadata_json = Column(JSON, nullable=False, server_default=text("'{}'"))
+
+
+class Medication(Base):
+    __tablename__ = "medications"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    name = Column(String, nullable=False, index=True)
+    category = Column(String, nullable=True)
+    dosage_form = Column(String, nullable=True)
+    description = Column(String, nullable=True)
 
 
 class Device(Base):
@@ -110,12 +185,14 @@ class Device(Base):
 
     id = Column(Integer, primary_key=True, nullable=False)
     device_id = Column(String, nullable=False, unique=True, index=True)
+    patient_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     label = Column(String, nullable=True)
     firmware_version = Column(String, nullable=True)
     metadata_json = Column(JSON, nullable=False, server_default=text("'{}'"))
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     last_seen_at = Column(DateTime(timezone=True), nullable=True)
 
+    patient = relationship("User")
     sessions = relationship("MonitoringSession", back_populates="device")
     readings = relationship("RawReading", back_populates="device")
 
@@ -132,7 +209,7 @@ class MonitoringSession(Base):
     metadata_json = Column(JSON, nullable=False, server_default=text("'{}'"))
     started_at = Column(DateTime(timezone=True), nullable=False)
     ended_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
     device = relationship("Device", back_populates="sessions")
     patient = relationship("User")
@@ -161,7 +238,7 @@ class RawReading(Base):
     status = Column(String, nullable=False, server_default="active")
     sample_count = Column(Integer, nullable=False)
     metadata_json = Column(JSON, nullable=False, server_default=text("'{}'"))
-    received_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
+    received_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
     device = relationship("Device", back_populates="readings")
     session = relationship("MonitoringSession", back_populates="readings")
@@ -191,7 +268,7 @@ class AnalysisResult(Base):
         nullable=False,
         server_default="Decision-support only, not a final medical diagnosis.",
     )
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
     session = relationship("MonitoringSession", back_populates="analysis_results")
 
@@ -199,3 +276,22 @@ class AnalysisResult(Base):
         Index("ix_analysis_results_session_id", "session_id"),
         Index("ix_analysis_results_created_at", "created_at"),
     )
+
+
+class ClinicalAlert(Base):
+    __tablename__ = "clinical_alerts"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    patient_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    session_id = Column(String, ForeignKey("sessions.session_id", ondelete="CASCADE"), nullable=False)
+    analysis_id = Column(Integer, ForeignKey("analysis_results.id", ondelete="CASCADE"), nullable=True)
+    severity = Column(String, nullable=False, server_default="medium")
+    code = Column(String, nullable=False)
+    message = Column(String, nullable=False)
+    status = Column(String, nullable=False, server_default="open")
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+    patient = relationship("User")
+    session = relationship("MonitoringSession")
+    analysis = relationship("AnalysisResult")

@@ -134,6 +134,10 @@ class _SignUpViewState extends State<SignUpView> {
           emergencyEmail: '',
           emergencyPhone: '',
         );
+        await ApiService.login(
+          emailController.text.trim(),
+          passController.text,
+        );
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

@@ -1,0 +1,31 @@
+\chapter{Literature Review and Background}
+
+Medical App V3 combines ideas from mobile health, IoT sensing, backend API systems, relational databases, and machine learning based signal analysis. This chapter reviews the technologies and background concepts that support the implemented design.
+
+\section{Mobile Health and Remote Monitoring}
+
+Mobile health applications are commonly used to extend healthcare interaction beyond hospital visits. In this project, Flutter is used to build a cross-platform mobile interface \cite{flutter}. Flutter is suitable for the project because it supports a single Dart codebase for multiple platforms and provides rich UI components for charts, lists, forms, and role-specific screens. The implementation uses Flutter views for login, signup, home, settings, scheduled reminders, contacts, profile, doctor screens, patient screens, and ECG/PPG session visualization.
+
+\section{Backend APIs for Medical Applications}
+
+FastAPI is used as the backend framework \cite{fastapi}. It supports Python type annotations, Pydantic request validation, dependency injection, and automatic API documentation. These features fit the project because the backend must validate structured medical and signal payloads. For example, the \texttt{ReadingCreate} schema validates sampling rate limits, battery range, finite signal values, and matching ECG/PPG array lengths.
+
+\section{Relational Persistence}
+
+The backend uses SQLAlchemy models and PostgreSQL-oriented configuration for persistence \cite{sqlalchemy,postgresql}. A relational database is appropriate because the application contains structured relationships among users, doctors, patients, appointments, medical records, prescriptions, devices, sessions, readings, analysis results, and alerts. The code also includes Alembic migrations, which support controlled schema evolution.
+
+\section{ECG and PPG Signal Analysis}
+
+ECG and PPG signals are common physiological measurements. ECG can represent electrical cardiac activity, while PPG can reflect optical pulse changes. Public resources such as PhysioNet and the MIT-BIH Arrhythmia Database have influenced research in ECG analysis and arrhythmia classification \cite{physionet,mitbih}. Medical App V3 does not claim clinical validation against these datasets inside the repository; instead, it includes local Keras artifacts and adapters that perform decision-support classification when available.
+
+\section{Machine Learning Integration}
+
+TensorFlow/Keras is used for the local model artifacts \cite{tensorflow}. The backend defines three model adapters: \texttt{ecg\_arrhythmia\_v31}, \texttt{morphology\_heartbeat\_v1}, and \texttt{bp\_vital\_meta}. The implementation is designed to handle unavailable models by returning structured degraded results rather than failing the entire API response. This design is important in academic prototypes because model dependencies may not always be installed during testing.
+
+\section{Security Background}
+
+The backend uses JWT access tokens for authentication, following a common token-based API model \cite{jwt}. The code uses FastAPI's OAuth2 password bearer dependency pattern, which is related to OAuth2 bearer-token conventions \cite{oauth2}. Password hashing is implemented with bcrypt through Passlib. The device ingestion API can additionally require an \texttt{X-Device-Token} header when configured.
+
+\section{Comparison with the Proposed System}
+
+Existing systems may focus on only one layer, such as a wearable device, a mobile UI, or an AI classifier. Medical App V3 is distinctive as a graduation project because it connects all layers in one codebase. Its limitation is that it is still a prototype: the repository does not include clinical validation, production deployment scripts, regulatory documentation, or complete user-study results.

@@ -63,6 +63,7 @@ class UserOut(BaseModel):
     age:    Optional[str] = None
     height: Optional[str] = None
     weight: Optional[str] = None
+    doctor_id: Optional[int] = Field(default=None, validation_alias="doc_id")
 
     class Config:
         from_attributes = True
@@ -114,6 +115,19 @@ class PatientOut(BaseModel):
         from_attributes = True
 
 
+class DoctorCreate(BaseModel):
+    name: str
+    email: EmailStr
+    phone_number: str
+
+
+class DoctorOut(BaseModel):
+    id: int
+    name: str
+    email: EmailStr
+    phone_number: str
+
+
 class Reminder(BaseModel):
     title : str
     type: str
@@ -155,9 +169,149 @@ class AppointmentOut(BaseModel):
         from_attributes = True
 
 
+class MedicalRecordCreate(BaseModel):
+    patient_id: int
+    doctor_id: Optional[int] = None
+    title: str = "Medical record"
+    diagnosis: Optional[str] = None
+    notes: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    class Config:
+        extra = "allow"
+
+
+class MedicalRecordUpdate(BaseModel):
+    title: Optional[str] = None
+    diagnosis: Optional[str] = None
+    notes: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+    class Config:
+        extra = "allow"
+
+
+class MedicalRecordOut(BaseModel):
+    id: int
+    patient_id: int
+    doctor_id: Optional[int] = None
+    title: str
+    diagnosis: Optional[str] = None
+    notes: Optional[str] = None
+    metadata_json: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class PrescriptionCreate(BaseModel):
+    appointment_id: Optional[int] = None
+    patient_id: Optional[int] = None
+    doctor_id: Optional[int] = None
+    medication_name: str = "Medication"
+    dosage: Optional[str] = None
+    frequency: Optional[str] = None
+    instructions: Optional[str] = None
+
+    class Config:
+        extra = "allow"
+
+
+class PrescriptionUpdate(BaseModel):
+    medication_name: Optional[str] = None
+    dosage: Optional[str] = None
+    frequency: Optional[str] = None
+    instructions: Optional[str] = None
+
+    class Config:
+        extra = "allow"
+
+
+class PrescriptionOut(BaseModel):
+    id: int
+    appointment_id: Optional[int] = None
+    patient_id: int
+    doctor_id: Optional[int] = None
+    medication_name: str
+    dosage: Optional[str] = None
+    frequency: Optional[str] = None
+    instructions: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class LabResultCreate(BaseModel):
+    appointment_id: Optional[int] = None
+    patient_id: Optional[int] = None
+    doctor_id: Optional[int] = None
+    test_name: str = "Lab result"
+    result_value: Optional[str] = None
+    unit: Optional[str] = None
+    reference_range: Optional[str] = None
+    notes: Optional[str] = None
+
+    class Config:
+        extra = "allow"
+
+
+class LabResultOut(BaseModel):
+    id: int
+    appointment_id: Optional[int] = None
+    patient_id: int
+    doctor_id: Optional[int] = None
+    test_name: str
+    result_value: Optional[str] = None
+    unit: Optional[str] = None
+    reference_range: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ClinicOut(BaseModel):
+    id: int
+    name: str
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    specialty: Optional[str] = None
+    metadata_json: Dict[str, Any] = Field(default_factory=dict)
+
+    class Config:
+        from_attributes = True
+
+
+class MedicationOut(BaseModel):
+    id: int
+    name: str
+    category: Optional[str] = None
+    dosage_form: Optional[str] = None
+    description: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class DeviceRegister(BaseModel):
+    device_id: str = Field(..., min_length=1, max_length=128)
+    label: Optional[str] = None
+    firmware_version: Optional[str] = None
+    patient_id: Optional[int] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class DeviceAssign(BaseModel):
+    patient_id: Optional[int] = None
+
+
 class DeviceOut(BaseModel):
     id: int
     device_id: str
+    patient_id: Optional[int] = None
     label: Optional[str] = None
     firmware_version: Optional[str] = None
     metadata_json: Dict[str, Any] = Field(default_factory=dict)
@@ -263,3 +417,19 @@ class DeviceCommandPreview(BaseModel):
     reason: str
     message: str
     payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ClinicalAlertOut(BaseModel):
+    id: int
+    patient_id: Optional[int] = None
+    session_id: str
+    analysis_id: Optional[int] = None
+    severity: str
+    code: str
+    message: str
+    status: str
+    created_at: datetime
+    resolved_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

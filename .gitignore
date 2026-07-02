@@ -45,7 +45,11 @@ app.*.map.json
 /android/app/release
 
 # Local hardware secrets
-hardware/config.h
+hardware/**/config.h
+hardware/**/config.exe
 
 # Local backend environment
 Backend-bisho/.env
+Backend-bisho/.venv/
+Backend-bisho/.venv-win/
+Backend-bisho/.python-packages/

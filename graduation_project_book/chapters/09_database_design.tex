@@ -1,0 +1,67 @@
+\chapter{Database Design}
+
+The database design is implemented through SQLAlchemy models in \texttt{Backend-bisho/app/models.py}. The schema supports user management, doctor-patient relationships, clinical workflow data, hardware devices, monitoring sessions, raw readings, analysis results, and alerts.
+
+\section{Main Entities}
+
+\begin{longtable}{p{0.22\textwidth} p{0.24\textwidth} p{0.44\textwidth}}
+\caption{Important database tables}\\
+\toprule
+\textbf{Table} & \textbf{Key fields} & \textbf{Purpose}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Table} & \textbf{Key fields} & \textbf{Purpose}\\
+\midrule
+\endhead
+\texttt{users} & \texttt{id}, \texttt{email}, \texttt{role}, \texttt{doc\_id}, \texttt{emergency\_id} & Stores patient, doctor, and admin accounts.\\
+\texttt{emergencys} & \texttt{id}, \texttt{name}, \texttt{email}, \texttt{phone\_number} & Stores emergency contact data.\\
+\texttt{contacts} & \texttt{id}, \texttt{owner\_id} & Stores patient contact entries.\\
+\texttt{reminders} & \texttt{id}, \texttt{owner\_id}, \texttt{date}, \texttt{time\_hour} & Stores reminders.\\
+\texttt{appointments} & \texttt{id}, \texttt{doctor\_id}, \texttt{patient\_id} & Stores appointment records.\\
+\texttt{medical\_records} & \texttt{id}, \texttt{patient\_id}, \texttt{doctor\_id} & Stores diagnosis and notes with metadata JSON.\\
+\texttt{prescriptions} & \texttt{id}, \texttt{appointment\_id}, \texttt{patient\_id}, \texttt{doctor\_id} & Stores medication prescriptions.\\
+\texttt{lab\_results} & \texttt{id}, \texttt{appointment\_id}, \texttt{patient\_id}, \texttt{doctor\_id} & Stores laboratory result entries.\\
+\texttt{clinics} & \texttt{id}, \texttt{name}, \texttt{specialty} & Stores clinic catalog data.\\
+\texttt{medications} & \texttt{id}, \texttt{name}, \texttt{category} & Stores medication catalog data.\\
+\texttt{devices} & \texttt{id}, \texttt{device\_id}, \texttt{patient\_id} & Stores hardware device identities and assignment.\\
+\texttt{sessions} & \texttt{id}, \texttt{session\_id}, \texttt{device\_id}, \texttt{patient\_id} & Stores monitoring sessions.\\
+\texttt{raw\_readings} & \texttt{id}, \texttt{device\_id}, \texttt{session\_id}, \texttt{timestamp} & Stores ECG/PPG arrays and sensor metadata.\\
+\texttt{analysis\_results} & \texttt{id}, \texttt{session\_id}, \texttt{metrics}, \texttt{predictions} & Stores signal and AI analysis outputs.\\
+\texttt{clinical\_alerts} & \texttt{id}, \texttt{patient\_id}, \texttt{session\_id}, \texttt{analysis\_id} & Stores analysis-generated alerts and resolution status.\\
+\bottomrule
+\end{longtable}
+
+\section{Relationships}
+
+Users can reference another user as a doctor through \texttt{doc\_id}. Devices can be assigned to patients. Monitoring sessions belong to devices and optionally to patients. Raw readings belong to sessions and devices. Analysis results belong to sessions. Clinical alerts can reference patients, sessions, and analysis results. Appointments, prescriptions, medical records, and lab results connect doctors and patients.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    entity/.style={rectangle,draw,rounded corners,align=center,minimum width=2.6cm,minimum height=0.8cm},
+    arrow/.style={-{Latex[length=2mm]},thick}
+]
+\node[entity] (user) {users};
+\node[entity,right=of user] (device) {devices};
+\node[entity,right=of device] (session) {sessions};
+\node[entity,below=of session] (reading) {raw\_readings};
+\node[entity,left=of reading] (analysis) {analysis\_results};
+\node[entity,left=of analysis] (alerts) {clinical\_alerts};
+\node[entity,below=of user] (appt) {appointments};
+\node[entity,below=of appt] (clinical) {records / prescriptions / labs};
+\draw[arrow] (user) -- (device);
+\draw[arrow] (device) -- (session);
+\draw[arrow] (session) -- (reading);
+\draw[arrow] (session) -- (analysis);
+\draw[arrow] (analysis) -- (alerts);
+\draw[arrow] (user) -- (appt);
+\draw[arrow] (appt) -- (clinical);
+\end{tikzpicture}
+\caption{Simplified ERD for main clinical and monitoring tables}
+\label{fig:erd}
+\end{figure}
+
+\section{Constraints and Indexes}
+
+The \texttt{raw\_readings} table has a unique constraint on \texttt{session\_id} and \texttt{timestamp}, preventing duplicate packet corruption. Indexes are defined for session, device, timestamp, and analysis timestamps. Pydantic schemas complement database constraints by validating signal arrays, finite numbers, battery range, and sampling rate before data reaches the database.

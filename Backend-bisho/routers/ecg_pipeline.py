@@ -13,7 +13,10 @@ import app.models as models
 import app.schemas as schemas
 from app.config import settings
 from app.database import get_db
-from app.services.ai_inference import get_inference_service
+from app.services.ai_inference import ECG_RECORD_INPUT_SAMPLES, get_inference_service
+from app.services.analysis_worker import analysis_worker_state, enqueue_analysis
+from app.services.reading_storage import prepare_reading_storage
+from routers import oauth2
 
 logger = logging.getLogger(__name__)
 
@@ -36,14 +39,28 @@ def _require_device_token(request: Request) -> None:
         )
 
 
-def _get_or_create_device(db: Session, device_id: str) -> models.Device:
+def _get_or_create_device(
+    db: Session,
+    device_id: str,
+    metadata: Optional[dict] = None,
+) -> models.Device:
     device = db.query(models.Device).filter(models.Device.device_id == device_id).first()
+    firmware_version = (metadata or {}).get("firmware_version")
     if device is None:
-        device = models.Device(device_id=device_id, last_seen_at=_utcnow())
+        device = models.Device(
+            device_id=device_id,
+            firmware_version=firmware_version,
+            metadata_json=metadata or {},
+            last_seen_at=_utcnow(),
+        )
         db.add(device)
         db.flush()
     else:
         device.last_seen_at = _utcnow()
+        if firmware_version:
+            device.firmware_version = firmware_version
+        if metadata:
+            device.metadata_json = {**(device.metadata_json or {}), **metadata}
     return device
 
 
@@ -51,7 +68,8 @@ def _get_or_create_session(
     db: Session,
     payload: schemas.SessionCreate | schemas.ReadingCreate,
 ) -> models.MonitoringSession:
-    _get_or_create_device(db, payload.device_id)
+    device = _get_or_create_device(db, payload.device_id, getattr(payload, "metadata", {}) or {})
+    patient_id = getattr(payload, "patient_id", None) or device.patient_id
     session = (
         db.query(models.MonitoringSession)
         .filter(models.MonitoringSession.session_id == payload.session_id)
@@ -61,7 +79,7 @@ def _get_or_create_session(
         session = models.MonitoringSession(
             session_id=payload.session_id,
             device_id=payload.device_id,
-            patient_id=getattr(payload, "patient_id", None),
+            patient_id=patient_id,
             sampling_rate=payload.sampling_rate,
             status=payload.status,
             metadata_json=getattr(payload, "metadata", {}) or {},
@@ -72,7 +90,19 @@ def _get_or_create_session(
     else:
         session.status = payload.status or session.status
         session.sampling_rate = payload.sampling_rate or session.sampling_rate
+        if session.patient_id is None and patient_id is not None:
+            session.patient_id = patient_id
     return session
+
+
+def _analysis_patient_for_session(session: models.MonitoringSession) -> models.User | None:
+    if session.patient is not None:
+        return session.patient
+    device_patient = session.device.patient if session.device else None
+    if device_patient is not None:
+        session.patient_id = device_patient.id
+        return device_patient
+    return None
 
 
 def _session_or_404(db: Session, session_id: str) -> models.MonitoringSession:
@@ -102,6 +132,36 @@ def _readings_for_session(db: Session, session_id: str) -> List[models.RawReadin
     )
 
 
+def _delete_monitoring_session(db: Session, session_id: str) -> dict:
+    session = _session_or_404(db, session_id)
+    counts = {
+        "clinical_alerts": db.query(models.ClinicalAlert)
+        .filter(models.ClinicalAlert.session_id == session_id)
+        .delete(synchronize_session=False),
+        "analysis_results": db.query(models.AnalysisResult)
+        .filter(models.AnalysisResult.session_id == session_id)
+        .delete(synchronize_session=False),
+        "raw_readings": db.query(models.RawReading)
+        .filter(models.RawReading.session_id == session_id)
+        .delete(synchronize_session=False),
+        "sessions": 1,
+    }
+    db.delete(session)
+    return counts
+
+
+def _capture_issue(readings: List[models.RawReading]) -> str | None:
+    if not readings:
+        return None
+    latest = readings[-1]
+    metadata = latest.metadata_json or {}
+    if latest.status == "ppg_sensor_off" or metadata.get("ppg_sensor_ready") is False:
+        return "PPG sensor is offline. Check MAX30105 power, ground, SDA, and SCL wiring."
+    if latest.status == "no_finger" or metadata.get("finger_detected") is False:
+        return "Finger not detected on the PPG sensor. Place your finger over the sensor and keep still."
+    return None
+
+
 def _save_analysis(
     db: Session,
     session_id: str,
@@ -126,6 +186,17 @@ def _save_analysis(
     )
     db.add(analysis)
     db.flush()
+    for alert in result["alerts"]:
+        db.add(
+            models.ClinicalAlert(
+                patient_id=patient.id if patient else None,
+                session_id=session_id,
+                analysis_id=analysis.id,
+                severity=alert.get("severity", "warning"),
+                code=alert.get("code", "analysis_alert"),
+                message=alert.get("message", "Analysis generated a clinical review alert."),
+            )
+        )
     return analysis
 
 
@@ -133,14 +204,14 @@ def _maybe_auto_analyze(db: Session, session_id: str) -> None:
     if not settings.auto_analyze_on_upload:
         return
     readings = _readings_for_session(db, session_id)
-    sample_count = sum(reading.sample_count for reading in readings)
-    if sample_count < settings.auto_analyze_min_samples:
+    ecg_sample_count = sum(len(reading.ecg or []) for reading in readings)
+    required_samples = max(settings.auto_analyze_min_samples, ECG_RECORD_INPUT_SAMPLES)
+    if ecg_sample_count < required_samples:
         return
-    try:
-        session = _session_or_404(db, session_id)
-        _save_analysis(db, session_id, readings, patient=session.patient)
-    except Exception:
-        logger.exception("Auto-analysis failed for session %s", session_id)
+    if _capture_issue(readings):
+        return
+    if enqueue_analysis(session_id):
+        logger.info("Auto-analysis queued for session %s", session_id)
 
 
 def _build_device_commands(
@@ -148,6 +219,36 @@ def _build_device_commands(
     analysis: models.AnalysisResult | None = None,
 ) -> List[dict]:
     commands: List[dict] = []
+    metadata = reading.metadata_json or {}
+    if reading.status == "ppg_sensor_off" or metadata.get("ppg_sensor_ready") is False:
+        commands.append(
+            {
+                "command_type": "check_sensor_contact",
+                "priority": "high",
+                "reason": "ppg_sensor_off",
+                "message": "PPG sensor is offline. Check MAX30105 power, ground, SDA, and SCL wiring.",
+                "payload": {
+                    "device_id": reading.device_id,
+                    "session_id": reading.session_id,
+                    "ppg_reinit_count": metadata.get("ppg_reinit_count"),
+                },
+            }
+        )
+    elif reading.status == "no_finger" or metadata.get("finger_detected") is False:
+        commands.append(
+            {
+                "command_type": "check_sensor_contact",
+                "priority": "high",
+                "reason": "finger_not_detected",
+                "message": "Finger not detected on the PPG sensor. Place your finger over the sensor and keep still.",
+                "payload": {
+                    "device_id": reading.device_id,
+                    "session_id": reading.session_id,
+                    "ir_mean": metadata.get("ir_mean"),
+                    "finger_ir_threshold": metadata.get("finger_ir_threshold"),
+                },
+            }
+        )
     if reading.status == "leads_off":
         commands.append(
             {
@@ -281,22 +382,29 @@ def create_reading(
         response.status_code = status.HTTP_200_OK
         return _serialize_reading(existing, _build_device_commands(existing))
 
+    storage_result = prepare_reading_storage(
+        ecg_values=payload.ecg,
+        ppg_values=payload.ppg,
+        status=payload.status,
+        metadata=payload.metadata,
+        compact_invalid_signals=settings.compact_invalid_reading_signals,
+        max_raw_signal_samples=settings.max_raw_signal_samples_per_reading,
+    )
     reading = models.RawReading(
         device_id=payload.device_id,
         session_id=payload.session_id,
         timestamp=payload.timestamp,
         sampling_rate=payload.sampling_rate,
-        ecg=payload.ecg,
-        ppg=payload.ppg,
+        ecg=storage_result.ecg,
+        ppg=storage_result.ppg,
         battery=payload.battery,
-        status=payload.status,
-        sample_count=min(len(payload.ecg), len(payload.ppg)),
-        metadata_json=payload.metadata,
+        status=storage_result.status,
+        sample_count=storage_result.sample_count,
+        metadata_json=storage_result.metadata,
     )
     db.add(reading)
     try:
         db.flush()
-        _maybe_auto_analyze(db, payload.session_id)
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -314,6 +422,7 @@ def create_reading(
         return _serialize_reading(duplicate, _build_device_commands(duplicate))
 
     db.refresh(reading)
+    _maybe_auto_analyze(db, payload.session_id)
     analysis = (
         db.query(models.AnalysisResult)
         .filter(models.AnalysisResult.session_id == payload.session_id)
@@ -339,7 +448,10 @@ def analyze_session(session_id: str, db: Session = Depends(get_db)):
     readings = _readings_for_session(db, session_id)
     if not readings:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No readings found")
-    analysis = _save_analysis(db, session_id, readings, patient=session.patient)
+    capture_issue = _capture_issue(readings)
+    if capture_issue is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=capture_issue)
+    analysis = _save_analysis(db, session_id, readings, patient=_analysis_patient_for_session(session))
     db.commit()
     db.refresh(analysis)
     logger.info("Analysis %s completed for session %s", analysis.id, session_id)
@@ -374,13 +486,14 @@ def get_session_readings(
     db: Session = Depends(get_db),
 ):
     _session_or_404(db, session_id)
-    return (
+    latest_readings = (
         db.query(models.RawReading)
         .filter(models.RawReading.session_id == session_id)
-        .order_by(models.RawReading.timestamp.asc())
+        .order_by(models.RawReading.timestamp.desc())
         .limit(max(1, min(limit, 2000)))
         .all()
     )
+    return list(reversed(latest_readings))
 
 
 @router.get("/sessions/{session_id}/analysis", response_model=List[schemas.AnalysisResultOut])
@@ -392,6 +505,38 @@ def get_session_analysis(session_id: str, db: Session = Depends(get_db)):
         .order_by(models.AnalysisResult.created_at.desc())
         .all()
     )
+
+
+@router.delete("/sessions/{session_id}", status_code=status.HTTP_200_OK)
+def delete_session(session_id: str, db: Session = Depends(get_db)):
+    counts = _delete_monitoring_session(db, session_id)
+    db.commit()
+    logger.info("Deleted monitoring session %s with counts %s", session_id, counts)
+    return {"deleted": counts}
+
+
+@router.delete("/sessions", status_code=status.HTTP_200_OK)
+def delete_all_sessions(db: Session = Depends(get_db)):
+    counts = {
+        "clinical_alerts": db.query(models.ClinicalAlert).delete(synchronize_session=False),
+        "analysis_results": db.query(models.AnalysisResult).delete(synchronize_session=False),
+        "raw_readings": db.query(models.RawReading).delete(synchronize_session=False),
+        "sessions": db.query(models.MonitoringSession).delete(synchronize_session=False),
+    }
+    db.commit()
+    logger.warning("Deleted all monitoring sessions and records with counts %s", counts)
+    return {"deleted": counts}
+
+
+@router.get("/analysis-worker/status")
+def get_analysis_worker_status():
+    state = analysis_worker_state()
+    return {
+        "running": state.running,
+        "queued": state.queued,
+        "processed": state.processed,
+        "failed": state.failed,
+    }
 
 
 @router.get("/ecg/classifications")
@@ -466,13 +611,128 @@ def get_classification_levels():
 
 
 @router.get("/devices", response_model=List[schemas.DeviceOut])
-def list_devices(db: Session = Depends(get_db)):
-    return db.query(models.Device).order_by(models.Device.last_seen_at.desc().nullslast()).all()
+def list_devices(patient_id: Optional[int] = None, db: Session = Depends(get_db)):
+    query = db.query(models.Device)
+    if patient_id is not None:
+        query = query.filter(models.Device.patient_id == patient_id)
+    return query.order_by(models.Device.last_seen_at.desc().nullslast()).all()
+
+
+@router.post(
+    "/devices/register",
+    status_code=status.HTTP_201_CREATED,
+    response_model=schemas.DeviceOut,
+)
+def register_device(
+    payload: schemas.DeviceRegister,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    _require_device_token(request)
+    existing = db.query(models.Device).filter(models.Device.device_id == payload.device_id).first()
+    device = _get_or_create_device(db, payload.device_id, payload.metadata)
+    if existing is not None:
+        response.status_code = status.HTTP_200_OK
+    device.label = payload.label or device.label
+    device.firmware_version = payload.firmware_version or device.firmware_version
+    if payload.patient_id is not None:
+        patient = db.query(models.User).filter(
+            models.User.id == payload.patient_id,
+            models.User.role == "patient",
+        ).first()
+        if patient is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Patient not found")
+        device.patient_id = payload.patient_id
+    db.commit()
+    db.refresh(device)
+    return device
+
+
+@router.patch("/devices/{device_id}/assign", response_model=schemas.DeviceOut)
+def assign_device(
+    device_id: str,
+    payload: schemas.DeviceAssign,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    device = _device_or_404(db, device_id)
+    if payload.patient_id is None:
+        if current_user.role not in {"admin", "doctor"} and current_user.id != device.patient_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not authorized")
+        device.patient_id = None
+    else:
+        patient = db.query(models.User).filter(
+            models.User.id == payload.patient_id,
+            models.User.role == "patient",
+        ).first()
+        if patient is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Patient not found")
+        if current_user.role == "patient" and current_user.id != payload.patient_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not authorized")
+        if current_user.role == "doctor" and patient.doc_id not in {None, current_user.id}:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Patient is assigned to another doctor")
+        device.patient_id = payload.patient_id
+    db.commit()
+    db.refresh(device)
+    return device
 
 
 @router.get("/devices/{device_id}", response_model=schemas.DeviceOut)
 def get_device(device_id: str, db: Session = Depends(get_db)):
     return _device_or_404(db, device_id)
+
+
+@router.get("/alerts", response_model=List[schemas.ClinicalAlertOut])
+def list_alerts(
+    patient_id: Optional[int] = None,
+    status_filter: str = "open",
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    query = db.query(models.ClinicalAlert)
+    if status_filter:
+        query = query.filter(models.ClinicalAlert.status == status_filter)
+    if patient_id is not None:
+        query = query.filter(models.ClinicalAlert.patient_id == patient_id)
+    if current_user.role == "patient":
+        query = query.filter(models.ClinicalAlert.patient_id == current_user.id)
+    elif current_user.role == "doctor":
+        patient_ids = [
+            patient.id
+            for patient in db.query(models.User.id)
+            .filter(models.User.role == "patient", models.User.doc_id == current_user.id)
+            .all()
+        ]
+        query = query.filter(models.ClinicalAlert.patient_id.in_(patient_ids))
+    return (
+        query.order_by(models.ClinicalAlert.created_at.desc())
+        .limit(max(1, min(limit, 200)))
+        .all()
+    )
+
+
+@router.patch("/alerts/{alert_id}/resolve", response_model=schemas.ClinicalAlertOut)
+def resolve_alert(
+    alert_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    if current_user.role not in {"admin", "doctor"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Doctor or admin access required")
+    alert = db.query(models.ClinicalAlert).filter(models.ClinicalAlert.id == alert_id).first()
+    if alert is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+    if current_user.role == "doctor" and alert.patient_id is not None:
+        patient = db.query(models.User).filter(models.User.id == alert.patient_id).first()
+        if patient is None or patient.doc_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not authorized")
+    alert.status = "resolved"
+    alert.resolved_at = _utcnow()
+    db.commit()
+    db.refresh(alert)
+    return alert
 
 
 @router.get("/ai/models")

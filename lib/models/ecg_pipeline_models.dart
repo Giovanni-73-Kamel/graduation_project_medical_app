@@ -1,6 +1,7 @@
 class Device {
   final int id;
   final String deviceId;
+  final int? patientId;
   final String? label;
   final String? firmwareVersion;
   final DateTime? lastSeenAt;
@@ -8,6 +9,7 @@ class Device {
   const Device({
     required this.id,
     required this.deviceId,
+    this.patientId,
     this.label,
     this.firmwareVersion,
     this.lastSeenAt,
@@ -17,6 +19,7 @@ class Device {
     return Device(
       id: json['id'] as int,
       deviceId: json['device_id'] as String,
+      patientId: json['patient_id'] as int?,
       label: json['label'] as String?,
       firmwareVersion: json['firmware_version'] as String?,
       lastSeenAt: _date(json['last_seen_at']),
@@ -67,6 +70,7 @@ class RawReading {
   final int? battery;
   final String status;
   final int sampleCount;
+  final Map<String, dynamic> metadataJson;
 
   const RawReading({
     required this.id,
@@ -78,6 +82,7 @@ class RawReading {
     required this.ppg,
     required this.status,
     required this.sampleCount,
+    this.metadataJson = const {},
     this.battery,
   });
 
@@ -93,6 +98,9 @@ class RawReading {
       battery: json['battery'] as int?,
       status: json['status'] as String,
       sampleCount: json['sample_count'] as int,
+      metadataJson: Map<String, dynamic>.from(
+        (json['metadata_json'] as Map?) ?? const {},
+      ),
     );
   }
 }
@@ -141,6 +149,39 @@ class AnalysisResult {
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
+}
+
+class LatestVitals {
+  final String? sessionId;
+  final DateTime? timestamp;
+  final double? heartRateBpm;
+  final double? ppgRateBpm;
+  final double? spo2Percent;
+  final double? systolicMmHg;
+  final double? diastolicMmHg;
+  final bool? fingerDetected;
+  final String? latestStatus;
+  final int sampleCount;
+  final String source;
+
+  const LatestVitals({
+    this.sessionId,
+    this.timestamp,
+    this.heartRateBpm,
+    this.ppgRateBpm,
+    this.spo2Percent,
+    this.systolicMmHg,
+    this.diastolicMmHg,
+    this.fingerDetected,
+    this.latestStatus,
+    this.sampleCount = 0,
+    this.source = 'No hardware readings yet',
+  });
+
+  bool get hasData => sessionId != null;
+  bool get hasEcgIssue => latestStatus == 'leads_off';
+  bool get hasPpgIssue =>
+      fingerDetected == false || latestStatus == 'no_finger' || latestStatus == 'ppg_sensor_off';
 }
 
 DateTime? _date(dynamic value) {

@@ -1,0 +1,15 @@
+\chapter{Introduction}
+
+Digital health systems increasingly rely on the integration of mobile applications, connected sensors, backend services, and data-driven decision-support methods. Cardiovascular monitoring is a particularly important application area because ECG and PPG signals can provide useful information about heart rhythm, pulse rate, signal quality, oxygen saturation estimates, and other physiological indicators. However, these signals are only useful when they are acquired reliably, validated carefully, stored consistently, and presented in a form that patients and doctors can understand.
+
+Medical App V3 was developed as a graduation project to demonstrate such an integrated system. The project is not limited to a static patient record application. It combines a Flutter application with a FastAPI backend, a PostgreSQL database, local AI model artifacts, and ESP32 firmware for ECG/PPG acquisition. The system therefore covers several software engineering concerns at once: user authentication, role-based workflows, REST API design, database modeling, signal processing, AI model integration, and mobile visualization.
+
+The motivation of the project is to reduce the gap between raw physiological data and practical health monitoring workflows. A patient can use the application to manage health-related information such as reminders, contacts, assigned doctors, appointments, and heart monitoring sessions. A doctor can manage patients and appointments and review related clinical information. The backend supports administrative and catalog features, while the ECG/PPG pipeline stores hardware readings and generates analysis results with explicit medical disclaimers.
+
+\section{Overview of the Proposed System}
+
+The proposed system follows a layered architecture. The first layer is the sensing layer, represented by ESP32 firmware that reads an ECG analog channel and MAX30105 PPG readings. The second layer is the backend service, which exposes REST endpoints, validates payloads, enforces authentication and authorization, stores data, and invokes signal analysis services. The third layer is the mobile frontend, written in Flutter, which consumes backend APIs and displays user-specific workflows and monitoring results. AI model artifacts are integrated as optional local Keras adapters, allowing the system to degrade gracefully when model dependencies are unavailable.
+
+\section{Book Organization}
+
+This book is organized into fourteen chapters. After this introduction, Chapter 3 defines the problem statement, Chapter 4 presents the objectives, and Chapter 5 reviews the background and related technologies. Chapters 6 and 7 analyze requirements and system workflows. Chapters 8 and 9 describe architecture and database design. Chapter 10 explains implementation details based on the actual code. Chapter 11 presents testing and evaluation, Chapter 12 discusses results, Chapter 13 concludes the project and proposes future work, and Chapter 14 provides appendices including API and installation material.

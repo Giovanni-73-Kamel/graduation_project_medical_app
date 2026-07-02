@@ -1,0 +1,21 @@
+\chapter{Results and Discussion}
+
+\section{Achieved Results}
+
+Medical App V3 successfully implements a working full-stack prototype. The frontend provides role-aware application flow, medical workflow screens, and ECG/PPG visualization. The backend exposes a broad set of REST endpoints and maintains a structured relational model. The hardware firmware can produce the expected JSON format for the backend. The analysis services can compute deterministic metrics and integrate local AI models when dependencies and artifacts are available.
+
+\section{System Behavior}
+
+The ECG/PPG session screen displays session cards, device assignment controls, signal charts, analysis sections, quality indicators, alerts, and disclaimers. The UI accounts for empty sessions, loading states, retry states, and sensor problems. The backend returns device commands that allow the firmware to report actionable messages when the sensor state is poor.
+
+\section{Strengths}
+
+The main strength of the system is integration. It connects embedded sampling, REST ingestion, database persistence, AI-assisted processing, and Flutter visualization. Another strength is defensive behavior: invalid readings are not blindly trusted, AI failures are represented as degraded outputs, and analysis output includes a decision-support disclaimer. The system also demonstrates role-aware medical workflow design rather than treating all users identically.
+
+\section{Limitations}
+
+The repository does not include evidence of formal clinical validation, regulatory compliance, production deployment, or a usability study. Some AI outputs depend on local model artifacts and optional dependencies. The blood-pressure model requires patient height and weight metadata. Screenshots are not packaged in the thesis folder, so placeholders are used in the appendix. These limitations do not invalidate the prototype, but they define its proper academic interpretation.
+
+\section{Discussion}
+
+The original problem was the difficulty of connecting raw physiological readings with practical application workflows. The implemented system addresses this by creating a complete path from sensor data to mobile interpretation. The project also recognizes the risks of medical AI by avoiding diagnostic overclaiming. Therefore, the system should be viewed as an educational and technical prototype that can support review and monitoring, not as an independently certified medical device.

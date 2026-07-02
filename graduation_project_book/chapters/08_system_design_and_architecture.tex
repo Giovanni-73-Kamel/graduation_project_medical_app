@@ -1,0 +1,54 @@
+\chapter{System Design and Architecture}
+
+\section{Overall Architecture}
+
+Medical App V3 uses a layered architecture. The frontend is implemented in Flutter under the \texttt{lib} directory. The backend is implemented in FastAPI under \texttt{Backend-bisho}. The database layer is represented by SQLAlchemy models and Alembic migrations. The hardware layer is represented by firmware under \texttt{hardware/ECG\_PPG\_HR\_SPO2}. AI artifacts are stored under \texttt{AI models}.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=1.1cm,
+    layer/.style={rectangle,draw,rounded corners,align=center,minimum width=10cm,minimum height=0.9cm},
+    arrow/.style={-{Latex[length=3mm]},thick}
+]
+\node[layer] (ui) {Flutter application: screens, widgets, models, API service};
+\node[layer,below=of ui] (api) {FastAPI routers: auth, users, doctors, appointments, records, ECG/PPG};
+\node[layer,below=of api] (service) {Services: signal processing, AI inference, chat, reading storage, analysis worker};
+\node[layer,below=of service] (data) {PostgreSQL database through SQLAlchemy models and Alembic migrations};
+\node[layer,below=of data] (hardware) {ESP32 firmware: ECG analog input, MAX30105 PPG sensor, Wi-Fi upload};
+\draw[arrow] (ui) -- (api);
+\draw[arrow] (api) -- (service);
+\draw[arrow] (service) -- (data);
+\draw[arrow] (hardware) -- (data);
+\end{tikzpicture}
+\caption{Layered architecture of Medical App V3}
+\label{fig:architecture}
+\end{figure}
+
+\section{Frontend Structure}
+
+The Flutter code separates authentication pages, home pages, doctor screens, patient screens, shared widgets, models, configuration, and API communication. The \texttt{ApiService} class centralizes HTTP calls and token storage. The application entry point loads settings, applies theme/font direction preferences, and uses an authentication gate to choose between login, patient home, or doctor home.
+
+\section{Backend Structure}
+
+The backend includes:
+
+\begin{itemize}[leftmargin=*]
+    \item \texttt{app/main.py}: FastAPI application creation, CORS middleware, router registration, and lifecycle startup/shutdown for the analysis worker.
+    \item \texttt{app/models.py}: SQLAlchemy entities.
+    \item \texttt{app/schemas.py}: Pydantic request and response models.
+    \item \texttt{routers}: REST endpoints grouped by domain.
+    \item \texttt{app/services}: signal processing, AI inference, reading storage, background analysis, chat service, and prompt definitions.
+\end{itemize}
+
+\section{Authentication and Authorization}
+
+Authentication uses login credentials and JWT access tokens. The backend creates tokens with a user identifier and expiration. Protected routes depend on \texttt{get\_current\_user}. Authorization is role-aware: doctors can access assigned patients, patients are restricted to their own information, and admin users receive broader privileges. Device ingestion has a separate optional token using the \texttt{X-Device-Token} header.
+
+\section{Error Handling and Degraded AI}
+
+The backend handles invalid schemas with Pydantic validation errors, missing records with HTTP 404 responses, unauthorized access with HTTP 401 or 403 responses, and invalid capture state with HTTP 400 responses. AI model calls are wrapped in timeout and retry logic. If TensorFlow artifacts or metadata are unavailable, the analysis response is marked as degraded rather than failing the whole session analysis.
+
+\section{Deployment Overview}
+
+The README describes development deployment using PostgreSQL, Alembic migrations, FastAPI on port 8000, Flutter with \texttt{BACKEND\_BASE\_URL}, and Arduino firmware configured through \texttt{config.h}. No production container, cloud deployment, or continuous deployment configuration was found, so production deployment is treated as future work.

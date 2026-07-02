@@ -50,7 +50,7 @@ def detect_peaks(values: Sequence[float], sampling_rate: int) -> List[int]:
     if len(values) < 3:
         return []
     normalized = normalize_signal(values)
-    min_distance = max(1, int(0.3 * sampling_rate))
+    min_distance = max(1, int(0.2 * sampling_rate))
     threshold = 0.55
     peaks: List[int] = []
     last_peak = -min_distance
@@ -110,7 +110,8 @@ def signal_quality(values: Sequence[float], peaks: Sequence[int], sampling_rate:
     maximum = max(values)
     amplitude = maximum - minimum
     zero_ratio = sum(1 for value in values if abs(value) < 1e-8) / len(values)
-    variance = statistics.fmean((value - statistics.fmean(values)) ** 2 for value in values)
+    mean = statistics.fmean(values)
+    variance = statistics.fmean((value - mean) ** 2 for value in values)
     expected_peaks = max(1.0, len(values) / max(sampling_rate, 1) * 1.0)
     peak_score = min(1.0, len(peaks) / expected_peaks)
     amplitude_score = 1.0 if amplitude > 0.05 else max(0.0, amplitude / 0.05)

@@ -1,0 +1,26 @@
+\chapter{Conclusion and Future Work}
+
+\section{Conclusion}
+
+This graduation project designed and implemented Medical App V3, a full-stack medical monitoring system that combines Flutter, FastAPI, PostgreSQL, ESP32 firmware, signal processing, and optional AI model adapters. The project supports patient, doctor, and admin workflows while also handling ECG/PPG data ingestion and analysis. The implemented architecture demonstrates practical knowledge of mobile application development, backend API design, database modeling, authentication, authorization, embedded device communication, and AI-assisted health monitoring.
+
+The project achieved its main technical goals by connecting hardware readings to persistent sessions, exposing APIs for analysis and retrieval, displaying signal charts and metrics in Flutter, and including tests for key backend and frontend behaviors. The explicit disclaimer that AI results are decision-support only is an important part of the system's responsible design.
+
+\section{Lessons Learned}
+
+The project shows that medical monitoring systems require careful validation at every layer. Hardware status must be captured, invalid signal states must be handled, API schemas must reject unsafe payloads, databases must prevent duplicate readings, and user roles must be enforced consistently. It also shows that AI integration should include timeout handling, fallback behavior, and transparent status reporting.
+
+\section{Future Work}
+
+Future work can improve the system in the following ways:
+
+\begin{itemize}[leftmargin=*]
+    \item Add a production deployment configuration using containers, HTTPS, environment-specific settings, and database backup plans.
+    \item Add formal clinical validation with approved datasets and expert review.
+    \item Add more complete UI screenshots and a polished user manual.
+    \item Add real-time streaming or WebSocket updates for live monitoring.
+    \item Add notification workflows for alerts and appointment reminders.
+    \item Expand automated tests for all clinical workflow routers and Flutter screens.
+    \item Add audit logging for medical-record changes and alert resolution.
+    \item Improve model governance by documenting training data, evaluation metrics, versioning, and limitations.
+\end{itemize}

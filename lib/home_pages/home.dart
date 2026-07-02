@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:medical/functions/app_colors.dart';
@@ -8,6 +9,7 @@ import 'package:medical/Ai_bot/chatbot_widget.dart';
 import 'package:medical/home_pages/scheduled.dart';
 import 'package:medical/home_pages/contacts.dart';
 import 'package:medical/home_pages/settings.dart';
+import 'package:medical/models/ecg_pipeline_models.dart';
 import 'package:medical/services/api_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -159,11 +161,41 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   String userName = 'User';
   bool _isLoading = true;
+  bool _vitalsLoading = true;
+  bool _fetchingVitals = false;
+  String? _vitalsError;
+  LatestVitals _vitals = const LatestVitals();
+  Timer? _vitalsTimer;
 
   @override
   void initState() {
     super.initState();
-    _fetchProfile();
+    _loadHome();
+    _vitalsTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _fetchVitals(showLoading: false),
+    );
+  }
+
+  @override
+  void dispose() {
+    _vitalsTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadHome() async {
+    setState(() {
+      _isLoading = true;
+      _vitalsLoading = true;
+      _vitalsError = null;
+    });
+    await Future.wait([
+      _fetchProfile(),
+      _fetchVitals(showLoading: true),
+    ]);
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _fetchProfile() async {
@@ -173,11 +205,40 @@ class _HomePageState extends State<HomePage> {
         setState(() {
           userName =
               profile['username'] ?? profile['email'].split('@')[0];
-          _isLoading = false;
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      // Keep the dashboard usable even if profile loading fails.
+    }
+  }
+
+  Future<void> _fetchVitals({bool showLoading = true}) async {
+    if (_fetchingVitals) return;
+    _fetchingVitals = true;
+    if (showLoading && mounted) {
+      setState(() {
+        _vitalsLoading = true;
+        _vitalsError = null;
+      });
+    }
+    try {
+      final vitals = await ApiService.getLatestVitals();
+      if (mounted) {
+        setState(() {
+          _vitals = vitals;
+          _vitalsLoading = false;
+          _vitalsError = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _vitalsLoading = false;
+          _vitalsError = e.toString();
+        });
+      }
+    } finally {
+      _fetchingVitals = false;
     }
   }
 
@@ -188,9 +249,13 @@ class _HomePageState extends State<HomePage> {
     }
 
     return SafeArea(
-      child: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        child: Column(
+      child: RefreshIndicator(
+        onRefresh: _loadHome,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
+          ),
+          child: Column(
           children: [
             // ── Greeting bar ──────────────────────────────────────────────
             Container(
@@ -254,23 +319,52 @@ class _HomePageState extends State<HomePage> {
             ),
 
             // ── Blood Pressure widget (full width) ────────────────────────
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 14, 20, 0),
-              child: BloodPressureWidget(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+              child: _VitalsSyncStrip(
+                vitals: _vitals,
+                isLoading: _vitalsLoading,
+                error: _vitalsError,
+                onRefresh: () => _fetchVitals(showLoading: true),
+              ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+              child: BloodPressureWidget(
+                systolic: _vitals.hasPpgIssue ? null : _vitals.systolicMmHg,
+                diastolic: _vitals.hasPpgIssue ? null : _vitals.diastolicMmHg,
+                isLoading: _vitalsLoading,
+              ),
             ),
 
             // ── Heart Rate + SpO2 (side by side) ──────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
               child: Row(
-                children: const [
-                  Expanded(child: HeartRateWidget()),
-                  SizedBox(width: 14),
-                  Expanded(child: SpO2Widget()),
+                children: [
+                  Expanded(
+                    child: HeartRateWidget(
+                      heartRateBpm: _vitals.hasEcgIssue || _vitals.hasPpgIssue
+                          ? null
+                          : _vitals.heartRateBpm,
+                      ppgRateBpm: _vitals.hasPpgIssue ? null : _vitals.ppgRateBpm,
+                      isLoading: _vitalsLoading,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: SpO2Widget(
+                      spo2Percent:
+                          _vitals.hasPpgIssue ? null : _vitals.spo2Percent,
+                      isLoading: _vitalsLoading,
+                    ),
+                  ),
                 ],
               ),
             ),
           ],
+          ),
         ),
       ),
     );
@@ -280,8 +374,94 @@ class _HomePageState extends State<HomePage> {
 // ═════════════════════════════════════════════════════════════════════════════
 //  BLOOD PRESSURE WIDGET  – animated left-right needle gauge
 // ═════════════════════════════════════════════════════════════════════════════
+class _VitalsSyncStrip extends StatelessWidget {
+  final LatestVitals vitals;
+  final bool isLoading;
+  final String? error;
+  final Future<void> Function() onRefresh;
+
+  const _VitalsSyncStrip({
+    required this.vitals,
+    required this.isLoading,
+    required this.error,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = SettingsScope.of(context).isDarkMode;
+    final textColor = isDark ? Colors.white : const Color(0xFF1A2A3A);
+    final hasFingerWarning = vitals.fingerDetected == false;
+    final hasPpgSensorWarning = vitals.latestStatus == 'ppg_sensor_off';
+    final hasLeadsWarning = vitals.latestStatus == 'leads_off';
+    final hasCaptureWarning = hasFingerWarning || hasPpgSensorWarning || hasLeadsWarning;
+    final subtitle = error != null
+        ? 'Backend not reachable'
+        : isLoading
+            ? 'Loading latest hardware readings'
+            : hasPpgSensorWarning
+                ? 'PPG sensor is offline. Check MAX30105 wiring.'
+                : hasLeadsWarning
+                    ? 'ECG leads are off. PPG results are still shown.'
+                    : hasFingerWarning
+                        ? 'Finger not detected on PPG sensor'
+                        : vitals.hasData
+                            ? '${vitals.source} | ${_formatDateTime(vitals.timestamp)}'
+                            : vitals.source;
+    final warningColor = error != null || hasCaptureWarning
+        ? const Color(0xFFC62828)
+        : textColor;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withOpacity(0.08) : Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.primary.withOpacity(0.14)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.sensors, color: AppColors.primary, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              subtitle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: warningColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Refresh vitals',
+            onPressed: isLoading ? null : onRefresh,
+            icon: isLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh, size: 20),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class BloodPressureWidget extends StatefulWidget {
-  const BloodPressureWidget({super.key});
+  final double? systolic;
+  final double? diastolic;
+  final bool isLoading;
+
+  const BloodPressureWidget({
+    super.key,
+    this.systolic,
+    this.diastolic,
+    this.isLoading = false,
+  });
 
   @override
   State<BloodPressureWidget> createState() => _BloodPressureWidgetState();
@@ -293,10 +473,6 @@ class _BloodPressureWidgetState extends State<BloodPressureWidget>
   late final AnimationController _pulseCtrl;
   late final Animation<double> _needleAnim;
   late final Animation<double> _pulseAnim;
-
-  // Demo values
-  final int systolic = 120;
-  final int diastolic = 80;
 
   @override
   void initState() {
@@ -391,7 +567,9 @@ class _BloodPressureWidgetState extends State<BloodPressureWidget>
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      SettingsScope.of(context).t('normal'),
+                      widget.systolic == null || widget.diastolic == null
+                          ? 'Waiting'
+                          : SettingsScope.of(context).t('normal'),
                       style: const TextStyle(
                           color: Colors.white,
                           fontSize: 12,
@@ -406,9 +584,19 @@ class _BloodPressureWidgetState extends State<BloodPressureWidget>
               // ── Values row ─────────────────────────────────────────────────
               Row(
                 children: [
-                  _bpCircle('$systolic', SettingsScope.of(context).t('sys'), 'mmHg', _pulseAnim.value),
+                  _bpCircle(
+                    widget.isLoading ? '...' : _whole(widget.systolic),
+                    SettingsScope.of(context).t('sys'),
+                    'mmHg',
+                    _pulseAnim.value,
+                  ),
                   const SizedBox(width: 12),
-                  _bpCircle('$diastolic', SettingsScope.of(context).t('dia'), 'mmHg', _pulseAnim.value),
+                  _bpCircle(
+                    widget.isLoading ? '...' : _whole(widget.diastolic),
+                    SettingsScope.of(context).t('dia'),
+                    'mmHg',
+                    _pulseAnim.value,
+                  ),
                   const Spacer(),
                   // Animated heartbeat icon
                   AnimatedBuilder(
@@ -481,7 +669,16 @@ class _BloodPressureWidgetState extends State<BloodPressureWidget>
 //  HEART RATE WIDGET  – animated ECG / waveform line
 // ═════════════════════════════════════════════════════════════════════════════
 class HeartRateWidget extends StatefulWidget {
-  const HeartRateWidget({super.key});
+  final double? heartRateBpm;
+  final double? ppgRateBpm;
+  final bool isLoading;
+
+  const HeartRateWidget({
+    super.key,
+    this.heartRateBpm,
+    this.ppgRateBpm,
+    this.isLoading = false,
+  });
 
   @override
   State<HeartRateWidget> createState() => _HeartRateWidgetState();
@@ -574,18 +771,20 @@ class _HeartRateWidgetState extends State<HeartRateWidget>
 
               // Value
               RichText(
-                text: const TextSpan(
+                text: TextSpan(
                   children: [
                     TextSpan(
-                      text: '72',
-                      style: TextStyle(
+                      text: widget.isLoading
+                          ? '...'
+                          : _whole(widget.heartRateBpm ?? widget.ppgRateBpm),
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 36,
                         fontWeight: FontWeight.bold,
                         height: 1,
                       ),
                     ),
-                    TextSpan(
+                    const TextSpan(
                       text: ' bpm',
                       style: TextStyle(
                         color: Colors.white70,
@@ -600,7 +799,9 @@ class _HeartRateWidgetState extends State<HeartRateWidget>
               const SizedBox(height: 6),
 
               Text(
-                SettingsScope.of(context).t('normal_range'),
+                widget.ppgRateBpm == null
+                    ? 'Waiting for hardware'
+                    : 'PPG ${_oneDecimal(widget.ppgRateBpm)} bpm',
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.7),
                   fontSize: 11,
@@ -677,7 +878,14 @@ class _EcgPainter extends CustomPainter {
 //  SpO2 WIDGET  – animated circular arc progress
 // ═════════════════════════════════════════════════════════════════════════════
 class SpO2Widget extends StatefulWidget {
-  const SpO2Widget({super.key});
+  final double? spo2Percent;
+  final bool isLoading;
+
+  const SpO2Widget({
+    super.key,
+    this.spo2Percent,
+    this.isLoading = false,
+  });
 
   @override
   State<SpO2Widget> createState() => _SpO2WidgetState();
@@ -686,11 +894,7 @@ class SpO2Widget extends StatefulWidget {
 class _SpO2WidgetState extends State<SpO2Widget>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
-  late final Animation<double> _arc;
   late final Animation<double> _glow;
-
-  // Demo value
-  final double spo2 = 0.98; // 98 %
 
   @override
   void initState() {
@@ -699,9 +903,6 @@ class _SpO2WidgetState extends State<SpO2Widget>
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     )..repeat(reverse: true);
-
-    _arc = Tween<double>(begin: spo2 - 0.01, end: spo2 + 0.005)
-        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
 
     _glow = Tween<double>(begin: 0.6, end: 1.0)
         .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
@@ -718,6 +919,13 @@ class _SpO2WidgetState extends State<SpO2Widget>
     return AnimatedBuilder(
       animation: _ctrl,
       builder: (_, __) {
+        final baseValue = widget.spo2Percent == null
+            ? 0.0
+            : (widget.spo2Percent! / 100.0).clamp(0.0, 1.0);
+        final animatedValue = widget.spo2Percent == null
+            ? 0.0
+            : (baseValue + sin(_ctrl.value * 2 * pi) * 0.004)
+                .clamp(0.0, 1.0);
         return Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
@@ -769,10 +977,14 @@ class _SpO2WidgetState extends State<SpO2Widget>
                   width: 80,
                   height: 80,
                   child: CustomPaint(
-                    painter: _CircleArcPainter(_arc.value, _glow.value),
+                    painter: _CircleArcPainter(animatedValue, _glow.value),
                     child: Center(
                       child: Text(
-                        '${(_arc.value * 100).toStringAsFixed(0)}%',
+                        widget.isLoading
+                            ? '...'
+                            : widget.spo2Percent == null
+                                ? '--'
+                                : '${widget.spo2Percent!.toStringAsFixed(0)}%',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 20,
@@ -797,7 +1009,9 @@ class _SpO2WidgetState extends State<SpO2Widget>
               const SizedBox(height: 2),
 
               Text(
-                SettingsScope.of(context).t('excellent'),
+                widget.spo2Percent == null
+                    ? 'Waiting for sensor'
+                    : 'Hardware estimate',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 13,
@@ -864,4 +1078,21 @@ class _CircleArcPainter extends CustomPainter {
   @override
   bool shouldRepaint(_CircleArcPainter old) =>
       old.value != value || old.glow != glow;
+}
+
+String _whole(double? value) {
+  if (value == null) return '--';
+  return value.round().toString();
+}
+
+String _oneDecimal(double? value) {
+  if (value == null) return '--';
+  return value.toStringAsFixed(value % 1 == 0 ? 0 : 1);
+}
+
+String _formatDateTime(DateTime? value) {
+  if (value == null) return 'no timestamp';
+  final local = value.toLocal();
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${two(local.hour)}:${two(local.minute)}';
 }

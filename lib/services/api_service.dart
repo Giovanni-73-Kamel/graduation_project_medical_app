@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:medical/config/app_config.dart';
 import 'package:medical/models/ecg_pipeline_models.dart';
 import 'package:http/http.dart' as http;
@@ -813,6 +814,38 @@ class ApiService {
     throw Exception(_messageFromResponse(response, 'Failed to load sessions'));
   }
 
+  static Future<List<Device>> getDevices({int? patientId}) async {
+    final uri = Uri.parse('$baseUrl/api/devices').replace(
+      queryParameters: patientId == null ? null : {'patient_id': '$patientId'},
+    );
+    final response = await http.get(uri);
+    if (response.statusCode == 200) {
+      return (json.decode(response.body) as List<dynamic>)
+          .map((item) => Device.fromJson(item as Map<String, dynamic>))
+          .toList();
+    }
+    throw Exception(_messageFromResponse(response, 'Failed to load devices'));
+  }
+
+  static Future<Device> assignDevice(String deviceId, int? patientId) async {
+    final token = await getToken();
+    if (token == null) {
+      throw Exception('No authentication token found. Please login first.');
+    }
+    final response = await http.patch(
+      Uri.parse('$baseUrl/api/devices/$deviceId/assign'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: json.encode({'patient_id': patientId}),
+    );
+    if (response.statusCode == 200) {
+      return Device.fromJson(json.decode(response.body) as Map<String, dynamic>);
+    }
+    throw Exception(_messageFromResponse(response, 'Failed to assign device'));
+  }
+
   static Future<MonitoringSession> getSession(String sessionId) async {
     final response = await http.get(
       Uri.parse('$baseUrl/api/sessions/$sessionId'),
@@ -823,6 +856,24 @@ class ApiService {
       );
     }
     throw Exception(_messageFromResponse(response, 'Failed to load session'));
+  }
+
+  static Future<void> deleteSession(String sessionId) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/api/sessions/$sessionId'),
+    );
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception(_messageFromResponse(response, 'Failed to delete session'));
+    }
+  }
+
+  static Future<void> deleteAllSessions() async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/api/sessions'),
+    );
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception(_messageFromResponse(response, 'Failed to delete sessions'));
+    }
   }
 
   static Future<List<RawReading>> getSessionReadings(
@@ -867,6 +918,71 @@ class ApiService {
     throw Exception(_messageFromResponse(response, 'Failed to analyze session'));
   }
 
+  static Future<LatestVitals> getLatestVitals() async {
+    final sessions = await getSessions();
+    if (sessions.isEmpty) {
+      return const LatestVitals();
+    }
+
+    final session = sessions.first;
+    final results = await Future.wait<dynamic>([
+      getSessionReadings(session.sessionId, limit: 2000),
+      getSessionAnalysis(session.sessionId),
+    ]);
+    final readings = results[0] as List<RawReading>;
+    final analyses = results[1] as List<AnalysisResult>;
+    final latestReading = readings.isEmpty ? null : readings.last;
+    final latestAnalysis = analyses.isEmpty ? null : analyses.first;
+    final AnalysisResult? freshAnalysis =
+        latestAnalysis != null &&
+                (latestReading == null ||
+                    !latestAnalysis.createdAt.isBefore(latestReading.timestamp))
+            ? latestAnalysis
+            : null;
+
+    final metrics = freshAnalysis?.metrics ?? const <String, dynamic>{};
+    final predictionModels = latestAnalysis == null
+        ? const <String, dynamic>{}
+        : Map<String, dynamic>.from(
+            (latestAnalysis.predictions['models'] as Map?) ?? const {},
+          );
+    final models = Map<String, dynamic>.from(
+      predictionModels,
+    );
+    final bloodPressure = Map<String, dynamic>.from(
+      (models['blood_pressure_vital_meta'] as Map?) ?? const {},
+    );
+    final readingMetadata =
+        latestReading?.metadataJson ?? const <String, dynamic>{};
+
+    final estimatedPpgRate =
+        _num(metrics['ppg_rate_bpm']) ?? _estimatePpgRate(readings, session.samplingRate);
+    final heartRate =
+        _num(metrics['heart_rate_bpm']) ?? estimatedPpgRate;
+
+    return LatestVitals(
+      sessionId: session.sessionId,
+      timestamp: latestReading?.timestamp ?? latestAnalysis?.createdAt,
+      heartRateBpm: heartRate,
+      ppgRateBpm: estimatedPpgRate,
+      spo2Percent: _num(readingMetadata['spo2_percent']) ??
+          _num(readingMetadata['estimated_spo2_percent']) ??
+          _num(readingMetadata['spo2']) ??
+          _num(metrics['spo2_percent']),
+      systolicMmHg: _num(bloodPressure['systolic_mmHg']),
+      diastolicMmHg: _num(bloodPressure['diastolic_mmHg']),
+      fingerDetected: _bool(readingMetadata['finger_detected']),
+      latestStatus: latestReading?.status,
+      sampleCount: readings.fold<int>(
+        0,
+        (sum, reading) => sum + reading.sampleCount,
+      ),
+      source: freshAnalysis == null
+          ? 'Latest hardware reading'
+          : 'AI analysis ${freshAnalysis.status}',
+    );
+  }
+
   static String _messageFromResponse(http.Response response, String fallback) {
     try {
       final data = json.decode(response.body);
@@ -876,6 +992,86 @@ class ApiService {
       // Use fallback below.
     }
     return '$fallback (${response.statusCode})';
+  }
+
+  static double? _num(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
+  static bool? _bool(dynamic value) {
+    if (value is bool) return value;
+    if (value is String) {
+      final normalized = value.toLowerCase().trim();
+      if (normalized == 'true') return true;
+      if (normalized == 'false') return false;
+    }
+    return null;
+  }
+
+  static double? _estimatePpgRate(List<RawReading> readings, int samplingRate) {
+    if (samplingRate <= 0) return null;
+    final ppg = readings
+        .expand((reading) => reading.ppg)
+        .where((value) => value.isFinite)
+        .toList(growable: false);
+    if (ppg.length < samplingRate * 2) return null;
+
+    final window = max(3, samplingRate ~/ 2);
+    final detrended = <double>[];
+    final queue = <double>[];
+    var runningSum = 0.0;
+    for (final value in ppg) {
+      runningSum += value;
+      queue.add(value);
+      if (queue.length > window) {
+        runningSum -= queue.removeAt(0);
+      }
+      detrended.add(value - runningSum / queue.length);
+    }
+
+    final mean = detrended.reduce((a, b) => a + b) / detrended.length;
+    final variance = detrended
+            .map((value) => (value - mean) * (value - mean))
+            .reduce((a, b) => a + b) /
+        detrended.length;
+    final std = sqrt(variance);
+    if (std < 1e-8) return null;
+
+    final normalized =
+        detrended.map((value) => (value - mean) / std).toList(growable: false);
+    final minDistance = max(1, (0.2 * samplingRate).round());
+    final peaks = <int>[];
+    var lastPeak = -minDistance;
+    for (var index = 1; index < normalized.length - 1; index++) {
+      final center = normalized[index];
+      if (center < 0.55) continue;
+      if (center <= normalized[index - 1] || center < normalized[index + 1]) {
+        continue;
+      }
+      if (index - lastPeak < minDistance) {
+        if (peaks.isNotEmpty && center > normalized[peaks.last]) {
+          peaks[peaks.length - 1] = index;
+          lastPeak = index;
+        }
+        continue;
+      }
+      peaks.add(index);
+      lastPeak = index;
+    }
+    if (peaks.length < 2) return null;
+
+    final intervals = <double>[];
+    for (var index = 1; index < peaks.length; index++) {
+      final interval = (peaks[index] - peaks[index - 1]) / samplingRate;
+      if (interval >= 0.3 && interval <= 2.5) {
+        intervals.add(interval);
+      }
+    }
+    if (intervals.isEmpty) return null;
+    final average = intervals.reduce((a, b) => a + b) / intervals.length;
+    return double.parse((60.0 / average).toStringAsFixed(1));
   }
 
   /// GET /ecg/classifications

@@ -1,0 +1,59 @@
+\chapter{Implementation}
+
+\section{Technology Stack}
+
+The implementation uses Flutter and Dart for the frontend, FastAPI and Python for the backend, SQLAlchemy and Alembic for database access and migration, PostgreSQL for persistence, TensorFlow/Keras for optional AI model inference, and Arduino/ESP32 firmware for sensor acquisition. The Flutter application depends on packages such as \texttt{http}, \texttt{shared\_preferences}, \texttt{flutter\_local\_notifications}, \texttt{timezone}, \texttt{url\_launcher}, \texttt{image\_picker}, \texttt{google\_maps\_flutter}, and \texttt{geolocator}.
+
+\section{Project Folder Structure}
+
+\begin{lstlisting}[caption={Main repository structure}]
+lib/                         Flutter source code
+Backend-bisho/app/           FastAPI app, models, schemas, services
+Backend-bisho/routers/       API routers
+Backend-bisho/DB/versions/   Alembic migrations
+AI models/                   Local Keras/scaler artifacts
+hardware/ECG_PPG_HR_SPO2/    ESP32 firmware
+docs/                        Sample payload and Postman collection
+test/                        Flutter model tests
+Backend-bisho/tests/         Backend pytest tests
+\end{lstlisting}
+
+\section{Frontend Implementation}
+
+The Flutter entry point initializes settings, loads the theme and text direction, and runs an \texttt{AuthGate}. The authentication gate checks for a stored token and requests the current user profile. If the role is \texttt{doctor}, the app opens \texttt{DoctorHomeScreen}; otherwise it opens the patient home view. If token validation fails, the token is cleared and the login screen is shown.
+
+The \texttt{ApiService} class implements token helpers, authentication, profile requests, reminders, contacts, appointments, patients, doctors, medical records, prescriptions, lab results, clinics, medications, admin statistics, and ECG/PPG pipeline calls. This central service reduces repeated HTTP logic across UI screens.
+
+\section{ECG/PPG UI}
+
+The \texttt{MyHeartPage} loads sessions, devices, and profile information. Doctors and admins can assign devices to patients; patients can self-assign eligible devices. A session details page retrieves session metadata, raw readings, and analysis results. It draws ECG and PPG charts using a custom painter, presents metrics, handles sensor-state warnings, and allows manual analysis execution.
+
+\section{Backend Implementation}
+
+The FastAPI backend registers routers for posts, users, authentication, votes, reminders, contacts, chat, patients, doctors, appointments, ECG/PPG pipeline, medical records, prescriptions, lab results, catalogs, and admin functions. CORS configuration is loaded from settings, and an analysis worker is started during application lifespan.
+
+\section{Signal Processing Implementation}
+
+The signal-processing service implements normalization, moving average, detrending, peak detection, rate calculation, HRV calculation, signal-quality scoring, perfusion index calculation, and alert generation. A simplified code excerpt is shown below.
+
+\begin{lstlisting}[language=Python,caption={Peak-based metric workflow}]
+ecg_filtered = detrend(ecg, sampling_rate)
+ppg_filtered = detrend(ppg, sampling_rate)
+ecg_peaks = detect_peaks(ecg_filtered, sampling_rate)
+ppg_peaks = detect_peaks(ppg_filtered, sampling_rate)
+heart_rate = calculate_rate_from_peaks(ecg_peaks, sampling_rate)
+ppg_rate = calculate_rate_from_peaks(ppg_peaks, sampling_rate)
+hrv = calculate_hrv(ecg_peaks, sampling_rate)
+\end{lstlisting}
+
+\section{AI Inference Implementation}
+
+The inference service defines adapters for three models. The record-level ECG model expects at least 1250 ECG samples and produces class probability maps. The morphology model extracts beat-centered ECG windows of 186 samples. The blood-pressure model builds a PPG beat sequence at 125 Hz and uses patient metadata including weight, height, and BMI. Each adapter returns structured availability information, enabling degraded analysis when artifacts or metadata are missing.
+
+\section{Hardware Implementation}
+
+The ESP32 firmware samples at 250 Hz and batches 125 samples. It reads ECG through an analog pin, detects ECG leads-off state, reads IR and red values from the MAX30105 sensor, estimates finger contact, calculates a rough SpO2 value when possible, and uploads JSON to the backend. It also interprets backend command hints and prints messages for sensor contact, low battery, retry capture, clinical review, or continue sampling.
+
+\section{Security Implementation}
+
+Passwords are hashed with bcrypt. Users authenticate through a login route and receive JWT access tokens. Protected backend routes depend on the current user. Device uploads can be protected by \texttt{X-Device-Token}. Role checks are used in doctor, patient, admin, alert, medical-record, prescription, lab-result, and device-assignment routes.

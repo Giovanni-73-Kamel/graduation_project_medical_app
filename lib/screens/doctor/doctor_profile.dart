@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:medical/auth_pages/login.dart';
 import 'package:medical/functions/app_colors.dart';
 import 'package:medical/functions/custom_text.dart';
 import 'package:medical/services/api_service.dart';
@@ -392,8 +393,14 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton.icon(
-                  onPressed: () =>
-                      Navigator.of(context).popUntil((r) => r.isFirst),
+                  onPressed: () async {
+                    await ApiService.clearToken();
+                    if (!context.mounted) return;
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (_) => const LoginView()),
+                      (route) => false,
+                    );
+                  },
                   icon: const Icon(Icons.logout_rounded, color: Colors.white),
                   label: const CustomText(
                     text: 'Sign Out',

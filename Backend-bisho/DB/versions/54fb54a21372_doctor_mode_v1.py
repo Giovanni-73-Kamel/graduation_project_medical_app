@@ -33,7 +33,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['doc_id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
-    op.drop_table('patients')
+    op.execute("DROP TABLE IF EXISTS patients;")
     # ### end Alembic commands ###
 
 

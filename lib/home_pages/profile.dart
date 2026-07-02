@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:medical/auth_pages/login.dart';
 import 'package:medical/functions/app_colors.dart';
 import 'package:medical/functions/custom_text.dart';
 import 'package:medical/functions/settings_provider.dart';
@@ -26,15 +27,27 @@ class _ProfileViewState extends State<ProfileView> {
   String userName = "Loading...";
   String userEmail = "...";
   String userPhone = "...";
+  String userHeight = "";
+  String userWeight = "";
   int userAge = 0;
   int healthScore = 75;
   bool _isLoading = true;
+  bool _isSavingMetrics = false;
   File? _profileImage;
   final ImagePicker _picker = ImagePicker();
+  final TextEditingController _heightController = TextEditingController();
+  final TextEditingController _weightController = TextEditingController();
 
   // Doctor related state
   DoctorModel? _assignedDoctor;
   bool _isLoadingDoctor = true;
+
+  @override
+  void dispose() {
+    _heightController.dispose();
+    _weightController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -96,6 +109,10 @@ class _ProfileViewState extends State<ProfileView> {
         userEmail = profile['email'] ?? 'No email';
         userName = profile['username'] ?? userEmail.split('@')[0].toUpperCase();
         userPhone = profile['phone_number'] ?? 'Not set';
+        userHeight = _numericPart(_metricText(profile['height']));
+        userWeight = _numericPart(_metricText(profile['weight']));
+        _heightController.text = userHeight;
+        _weightController.text = userWeight;
 
         if (profile['date_of_birth'] != null) {
           userAge = _calculateAge(profile['date_of_birth']);
@@ -115,6 +132,137 @@ class _ProfileViewState extends State<ProfileView> {
         });
       }
     }
+  }
+
+  String _metricText(dynamic value) {
+    final text = value?.toString().trim() ?? '';
+    return text;
+  }
+
+  String _numericPart(String value) {
+    final match = RegExp(r'\d+(?:\.\d+)?').firstMatch(value);
+    return match?.group(0) ?? '';
+  }
+
+  double? _positiveNumber(String value) {
+    final parsed = double.tryParse(value.trim());
+    if (parsed == null || parsed <= 0) return null;
+    return parsed;
+  }
+
+  String _formatNumber(double value) {
+    return value == value.roundToDouble()
+        ? value.toStringAsFixed(0)
+        : value.toStringAsFixed(1);
+  }
+
+  Future<void> _saveBodyMetrics() async {
+    final height = _positiveNumber(_heightController.text);
+    final weight = _positiveNumber(_weightController.text);
+    if (height == null || weight == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter positive height and weight values.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSavingMetrics = true);
+    try {
+      final heightText = _formatNumber(height);
+      final weightText = _formatNumber(weight);
+      await ApiService.updateUserProfile({
+        'height': heightText,
+        'weight': weightText,
+      });
+      if (!mounted) return;
+      setState(() {
+        userHeight = heightText;
+        userWeight = weightText;
+        _heightController.text = heightText;
+        _weightController.text = weightText;
+      });
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Body metrics updated for blood pressure analysis.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update body metrics: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSavingMetrics = false);
+      }
+    }
+  }
+
+  Future<void> _showBodyMetricsEditor() async {
+    _heightController.text = userHeight;
+    _weightController.text = userWeight;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Body metrics'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _heightController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Height',
+                  suffixText: 'cm',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const Gap(14),
+              TextField(
+                controller: _weightController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Weight',
+                  suffixText: 'kg',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed:
+                  _isSavingMetrics ? null : () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              onPressed: _isSavingMetrics ? null : _saveBodyMetrics,
+              icon: _isSavingMetrics
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save_outlined),
+              label: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _fetchAssignedDoctor() async {
@@ -266,11 +414,48 @@ class _ProfileViewState extends State<ProfileView> {
 
                     const Gap(40),
 
+                    _buildBodyMetricsSection(
+                      textColor,
+                      subtextColor,
+                      emptyCardBg,
+                      emptyCardBorder,
+                    ),
+
+                    const Gap(40),
+
                     _buildHealthScoreCard(s),
 
                     const Gap(40),
 
                     _buildDoctorSection(s, textColor, subtextColor, emptyCardBg, emptyCardBorder),
+
+                    const Gap(40),
+
+                    SizedBox(
+                      width: double.infinity,
+                      height: 54,
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          await ApiService.clearToken();
+                          if (!context.mounted) return;
+                          Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(
+                              builder: (_) => const LoginView(),
+                            ),
+                            (route) => false,
+                          );
+                        },
+                        icon: const Icon(Icons.logout_rounded),
+                        label: const Text('Sign Out'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red[700],
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
+                    ),
 
                     const Gap(40),
                   ],
@@ -326,6 +511,128 @@ class _ProfileViewState extends State<ProfileView> {
                   weight: FontWeight.bold,
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBodyMetricsSection(
+    Color textColor,
+    Color subtextColor,
+    Color cardBg,
+    Color cardBorder,
+  ) {
+    final hasHeight = userHeight.trim().isNotEmpty;
+    final hasWeight = userWeight.trim().isNotEmpty;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: cardBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.monitor_heart_outlined, color: AppColors.primary),
+              const Gap(10),
+              Expanded(
+                child: Text(
+                  'Blood pressure AI profile',
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Edit body metrics',
+                onPressed: _showBodyMetricsEditor,
+                icon: const Icon(Icons.edit_outlined),
+                color: AppColors.primary,
+              ),
+            ],
+          ),
+          const Gap(14),
+          Row(
+            children: [
+              Expanded(
+                child: _buildMetricTile(
+                  label: 'Height',
+                  value: hasHeight ? '$userHeight cm' : 'Not set',
+                  isReady: hasHeight,
+                  textColor: textColor,
+                  subtextColor: subtextColor,
+                ),
+              ),
+              const Gap(12),
+              Expanded(
+                child: _buildMetricTile(
+                  label: 'Weight',
+                  value: hasWeight ? '$userWeight kg' : 'Not set',
+                  isReady: hasWeight,
+                  textColor: textColor,
+                  subtextColor: subtextColor,
+                ),
+              ),
+            ],
+          ),
+          const Gap(12),
+          Text(
+            hasHeight && hasWeight
+                ? 'Ready for the systolic and diastolic AI model.'
+                : 'Height and weight are required before the blood pressure AI model can run.',
+            style: TextStyle(
+              color: hasHeight && hasWeight ? Colors.green[700] : subtextColor,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricTile({
+    required String label,
+    required String value,
+    required bool isReady,
+    required Color textColor,
+    required Color subtextColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isReady
+            ? AppColors.primary.withValues(alpha: 0.08)
+            : Colors.orange.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: subtextColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const Gap(6),
+          Text(
+            value,
+            style: TextStyle(
+              color: textColor,
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ],
